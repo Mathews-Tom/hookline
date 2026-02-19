@@ -51,6 +51,12 @@ _on() {
     sentinel=$(_sentinel_path "$project")
     mkdir -p "$SENTINEL_DIR"
     date -u '+%Y-%m-%dT%H:%M:%SZ' > "$sentinel"
+    # Clear stale session state
+    if [[ "$project" == "all" ]]; then
+        rm -rf "$HOME/.claude/notify-state/"*
+    else
+        rm -rf "$HOME/.claude/notify-state/${project}"
+    fi
     if [[ "$project" == "all" ]]; then
         echo "🔔 Notifications ON (all projects)"
     else
