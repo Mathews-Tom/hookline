@@ -1,4 +1,4 @@
-# Claude Code → Telegram Notifications (v2)
+# Claude Code → Telegram Notifications
 
 **Rich Telegram alerts for Claude Code Agent Teams with debouncing, threading, project emojis, and inline mute buttons.**
 
@@ -45,13 +45,13 @@ Notifications are **OFF by default**. Toggle on per-project when starting long r
 
 ## Daily Workflow
 
-```
+```text
 You                          Claude Code                    Your Phone
  │                                │                              │
- ├─ /notify on ─────────────────►│                              │
- │  🔔 ON for pramana            │                              │
+ ├─ /notify on ──────────────────►│                              │
+ │  🔔 ON for pramana             │                              │
  │                                │                              │
- ├─ "Create an agent team..."───►│                              │
+ ├─ "Create an agent team..."────►│                              │
  │                                ├─ Spawns teammates            │
  │  (you walk away)               ├─ Working...                  │
  │                                ├─ SubagentStop ×3             │
@@ -65,23 +65,24 @@ You                          Claude Code                    Your Phone
  │                                │  (flushes batch first)  ────►│ 💤 challenger, researcher idle
  │                                │                              │
  │  (you come back)               │                              │
- │                                ├─ [Stop fires] ─────────────►│ ┌─ ✅ Stop ──── 🔮
+ │                                ├─ [Stop fires] ──────────────►│ ┌─ ✅ Stop ──── 🔮
  │                                │                              │   ⏱ 42m session
- ├─ /notify off ────────────────►│                              │
- │  🔕 OFF for pramana           │                              │
+ ├─ /notify off ─────────────────►│                              │
+ │  🔕 OFF for pramana            │                              │
 ```
 
 All messages in a session are **threaded under the first message** — keeps your Telegram chat clean.
 
 ### Toggle from Any Interface
 
-```
+```text
 ~/.claude/notify-enabled.{project}   ← project-scoped
 ~/.claude/notify-enabled             ← global fallback
 ```
 
 **Claude Code CLI / App / CoWork** — `/notify` slash command:
-```
+
+```text
 /notify on              Enable for current project (from cwd)
 /notify on all          Enable for all projects
 /notify on attest       Enable for attest specifically
@@ -91,6 +92,7 @@ All messages in a session are **threaded under the first message** — keeps you
 ```
 
 **Shell aliases** (instant, no LLM turn):
+
 ```bash
 notify-on               # Project from cwd
 notify-off
@@ -105,7 +107,9 @@ notify-status
 Full events use `<blockquote>` for indented body text and Unicode box-drawing for visual weight. Switched from MarkdownV2 to HTML for richer formatting options.
 
 ### 2. Project Emoji Mapping
+
 Configure per-project emojis in `~/.claude/notify-projects.json`:
+
 ```json
 {
   "attest": "🧪",
@@ -119,35 +123,46 @@ Configure per-project emojis in `~/.claude/notify-projects.json`:
 Messages show `🔮 pramana` instead of plain `pramana`. Scannable at a glance when multiple projects are active.
 
 ### 3. Session Duration
+
 The footer shows elapsed time since you toggled notifications on:
-```
+
+```text
 └─ 18:52 UTC ── ⏱ 42m
 ```
+
 Reads the timestamp from the sentinel file — zero additional state.
 
 ### 4. Debouncing
+
 SubagentStop and TeammateIdle events are batched within a 30-second window. Instead of 4 separate "Subagent finished" messages, you get one:
-```
+
+```text
 📋 ×4 subagents finished · 🔮 pramana · 18:10–18:52 UTC
 ```
+
 Batches flush when: a non-debounced event arrives, the batch ages past the window, or the session ends (Stop).
 
 Configure the window: `export CLAUDE_NOTIFY_DEBOUNCE=60` (default: 30 seconds)
 
 ### 5. Compact Mode
+
 Low-value events (TeammateIdle when standalone) get single-line format. High-value events (Stop, TaskCompleted, Notification) get the full box-drawing treatment.
 
 ### 6. Task Progress
+
 TaskCompleted events track cumulative progress per session:
-```
+
+```text
 ┌─ 🎯 TaskCompleted ─────── 🧪 attest
 │ Task 3/6
 │ Stress-test conclusions. Look for unstated assumptions…
 └─ 18:49 UTC ── ⏱ 39m
 ```
+
 Counter resets when the session ends (Stop event).
 
 ### 7. Thread Grouping
+
 All messages from a session are threaded under the first message via Telegram's `reply_to_message_id`. Keeps your chat clean — one thread per Agent Team run instead of scattered messages.
 
 ### 8. Inline Mute Buttons
@@ -159,35 +174,36 @@ python3 ~/.claude/hooks/notify.py --serve &
 The server long-polls Telegram for button presses and handles mute state.
 
 ### 9. Event Suppression
+
 Suppress specific events: `export CLAUDE_NOTIFY_SUPPRESS="SubagentStop,TeammateIdle"`
 
 ---
 
 ## Architecture
 
-```
+```text
 ┌──────────────────────────────────────────────────┐
-│                  Claude Code                      │
+│                  Claude Code                     │
 │   Agent (Lead)  ·  Teammate  ·  Teammate         │
-│       │              │              │             │
+│       │              │              │            │
 │  ─────┴──────────────┴──────────────┴──────────  │
-│       Hook Events (deterministic, always fire)    │
-└───────┼──────────┼──────────────────┼─────────────┘
+│       Hook Events (deterministic, always fire)   │
+└───────┼──────────┼──────────────────┼────────────┘
         ▼          ▼                  ▼
    ┌───────────────────────────────────────────┐
-   │              notify.py                     │
-   │                                            │
-   │  1. Read event from stdin                  │
-   │  2. Sentinel gate: project or global?      │
-   │     └─ No sentinel → exit (sub-ms)         │
-   │  3. Mute check: button-muted?              │
-   │     └─ Muted → exit                        │
-   │  4. Debounce: SubagentStop/TeammateIdle?   │
-   │     └─ Accumulate → exit (don't send yet)  │
-   │  5. Flush stale batches                    │
-   │  6. Format: HTML + box drawing             │
-   │  7. Send: thread grouping + buttons        │
-   │  8. Stop? Clean up session state           │
+   │              notify.py                    │
+   │                                           │
+   │  1. Read event from stdin                 │
+   │  2. Sentinel gate: project or global?     │
+   │     └─ No sentinel → exit (sub-ms)        │
+   │  3. Mute check: button-muted?             │
+   │     └─ Muted → exit                       │
+   │  4. Debounce: SubagentStop/TeammateIdle?  │
+   │     └─ Accumulate → exit (don't send yet) │
+   │  5. Flush stale batches                   │
+   │  6. Format: HTML + box drawing            │
+   │  7. Send: thread grouping + buttons       │
+   │  8. Stop? Clean up session state          │
    └──────────────────┬────────────────────────┘
                       ▼
               Telegram Bot API
@@ -202,7 +218,7 @@ Suppress specific events: `export CLAUDE_NOTIFY_SUPPRESS="SubagentStop,TeammateI
 
 ### State Files
 
-```
+```text
 ~/.claude/
 ├── notify-enabled.pramana          # Sentinel: ON for pramana
 ├── notify-projects.json            # Emoji mapping
@@ -232,6 +248,7 @@ Suppress specific events: `export CLAUDE_NOTIFY_SUPPRESS="SubagentStop,TeammateI
 4. Find `"chat":{"id":NNNNNN}` — that's your **chat ID**
 
 ### 2. Run Setup
+
 ```bash
 git clone <this-repo> && cd claude-telegram-hooks
 ./setup.sh
@@ -240,6 +257,7 @@ git clone <this-repo> && cd claude-telegram-hooks
 ```
 
 Installs:
+
 - `~/.claude/hooks/notify.py` — hook handler
 - `~/.claude/hooks/toggle.sh` — on/off/status toggle
 - `~/.claude/commands/notify.md` — `/notify` slash command
@@ -258,6 +276,7 @@ notify-off
 ```
 
 ### 4. Customize Project Emojis
+
 ```bash
 # Edit ~/.claude/notify-projects.json
 {
@@ -268,6 +287,7 @@ notify-off
 ```
 
 ### 5. Enable Inline Buttons (Optional)
+
 ```bash
 # Add to ~/.zshrc
 export CLAUDE_NOTIFY_BUTTONS=1
@@ -285,6 +305,7 @@ python3 ~/.claude/hooks/notify.py --serve &
 The button server handles inline mute button presses. Without it, notifications work fine — you just won't see the mute buttons.
 
 ### Quick Start
+
 ```bash
 export CLAUDE_NOTIFY_BUTTONS=1
 python3 ~/.claude/hooks/notify.py --serve
