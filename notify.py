@@ -23,13 +23,14 @@ Button server (optional, for inline mute buttons):
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import sys
 import time
 import urllib.error
-import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -106,6 +107,31 @@ def _clear_state(project: str, filename: str) -> None:
         pass
 
 
+def _locked_update(project: str, filename: str, updater: Callable[[dict], dict | None]) -> dict | None:
+    """Atomic read-modify-write with file locking. updater(data) returns new data or None to delete."""
+    path = _state_dir(project) / filename
+    lock_path = path.with_suffix(".lock")
+    lock_path.touch(exist_ok=True)
+    fd = lock_path.open("r")
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        try:
+            data = json.loads(path.read_text())
+        except (OSError, json.JSONDecodeError):
+            data = {}
+        result = updater(data)
+        if result is None:
+            path.unlink(missing_ok=True)
+        else:
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(result))
+            tmp.replace(path)
+        return result
+    finally:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        fd.close()
+
+
 # ── Project Config ───────────────────────────────────────────────────────────
 
 PROJECT_CONFIG_PATH = CLAUDE_DIR / "notify-projects.json"
@@ -122,7 +148,7 @@ def _get_project_config() -> dict:
             _project_config = json.loads(PROJECT_CONFIG_PATH.read_text())
         except (OSError, json.JSONDecodeError):
             _project_config = {}
-    return _project_config
+    return _project_config  # type: ignore[return-value]
 
 
 def _project_emoji(project: str) -> str:
@@ -160,6 +186,20 @@ def _session_key(project: str) -> str:
         except OSError:
             pass
     return "unknown"
+
+
+def _session_age_seconds(project: str) -> int | None:
+    """Return session age in seconds, or None if unavailable."""
+    sentinel = _sentinel_path(project)
+    if not sentinel:
+        return None
+    try:
+        ts_str = sentinel.read_text().strip()
+        started = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+        delta = datetime.now(timezone.utc) - started
+        return int(delta.total_seconds())
+    except (OSError, ValueError):
+        return None
 
 
 def _session_duration(project: str) -> str | None:
@@ -228,47 +268,50 @@ def _debounce_accumulate(project: str, event: dict) -> None:
     now = time.time()
     now_utc = datetime.now(timezone.utc).strftime("%H:%M")
 
-    state = _read_state(project, "debounce.json")
-    if not state:
-        state = {"events": {}, "first_time": now, "first_utc": now_utc}
+    def updater(state: dict) -> dict:
+        if not state:
+            state = {"events": {}, "first_time": now, "first_utc": now_utc}
+        events = state.get("events", {})
+        count = events.get(event_name, {}).get("count", 0)
+        names = set(events.get(event_name, {}).get("names", []))
+        if event_name == "TeammateIdle":
+            names.add(event.get("teammate_name", "unknown"))
+        events[event_name] = {
+            "count": count + 1,
+            "names": list(names),
+        }
+        state["events"] = events
+        state["last_time"] = now
+        state["last_utc"] = now_utc
+        return state
 
-    events = state.get("events", {})
-    count = events.get(event_name, {}).get("count", 0)
-
-    # For TeammateIdle, track unique teammate names
-    names = set(events.get(event_name, {}).get("names", []))
-    if event_name == "TeammateIdle":
-        names.add(event.get("teammate_name", "unknown"))
-
-    events[event_name] = {
-        "count": count + 1,
-        "names": list(names),
-    }
-    state["events"] = events
-    state["last_time"] = now
-    state["last_utc"] = now_utc
-    _write_state(project, "debounce.json", state)
+    _locked_update(project, "debounce.json", updater)
 
 
 def _debounce_flush(project: str) -> str | None:
     """Flush pending debounce batch. Returns formatted HTML or None."""
-    state = _read_state(project, "debounce.json")
-    if not state or not state.get("events"):
+    flushed: dict = {}
+
+    def updater(state: dict) -> None:
+        nonlocal flushed
+        flushed = state
+        return None  # delete the file
+
+    _locked_update(project, "debounce.json", updater)
+
+    if not flushed or not flushed.get("events"):
         return None
 
-    _clear_state(project, "debounce.json")
-
-    first_utc = state.get("first_utc", "??:??")
-    last_utc = state.get("last_utc", first_utc)
+    first_utc = flushed.get("first_utc", "??:??")
+    last_utc = flushed.get("last_utc", first_utc)
     time_range = first_utc if first_utc == last_utc else f"{first_utc}–{last_utc}"
     label = _project_label(project)
 
     parts = []
-    for event_name, info in state["events"].items():
+    for event_name, info in flushed["events"].items():
         count = info["count"]
         emoji = EMOJI.get(event_name, "🔔")
         names = info.get("names", [])
-
         if event_name == "SubagentStop":
             noun = "subagent" if count == 1 else "subagents"
             parts.append(f"{emoji} ×{count} {noun} finished")
@@ -399,11 +442,29 @@ def _extract_project(event: dict) -> str:
 def _extract_last_message(event: dict) -> str:
     """Try to extract the last assistant message from the transcript."""
     transcript_path = event.get("transcript_path", "")
-    if not transcript_path or not Path(transcript_path).exists():
+    if not transcript_path:
+        return ""
+    path = Path(transcript_path)
+    if not path.exists():
         return ""
     try:
-        lines = Path(transcript_path).read_text().strip().split("\n")
+        size = path.stat().st_size
+        if size > 5 * 1024 * 1024:  # 5MB
+            _log(f"Transcript too large ({size} bytes), skipping extraction")
+            return ""
+        # Read only the last 8KB for efficiency
+        tail_size = min(size, 8192)
+        with path.open("rb") as f:
+            if size > tail_size:
+                f.seek(-tail_size, 2)
+            raw = f.read().decode("utf-8", errors="replace")
+        # Discard partial first line from seek
+        lines = raw.split("\n")
+        if size > tail_size:
+            lines = lines[1:]  # first line is likely partial
         for line in reversed(lines[-20:]):
+            if not line.strip():
+                continue
             try:
                 entry = json.loads(line)
                 msg = entry.get("message", {})
@@ -632,6 +693,12 @@ def _handle_button(callback: dict) -> None:
     callback_id = callback.get("id", "")
     user = callback.get("from", {}).get("first_name", "?")
 
+    sender_id = str(callback.get("from", {}).get("id", ""))
+    if sender_id != CHAT_ID:
+        _answer_callback(callback_id, "Unauthorized")
+        _log(f"Rejected button press from {sender_id} (expected {CHAT_ID})")
+        return
+
     if data.startswith("mute_30_"):
         project = data[8:]
         until = time.time() + 1800  # 30 minutes
@@ -685,6 +752,10 @@ def main() -> None:
         return
     if event_name in SUPPRESS:
         return
+    if MIN_SESSION_AGE > 0:
+        age = _session_age_seconds(project)
+        if age is not None and age < MIN_SESSION_AGE:
+            return
 
     # ── Flush stale debounce batch (older than window) ───────────────────
     if _debounce_should_flush(project):

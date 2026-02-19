@@ -4,6 +4,7 @@
 # Usage:
 #   ./setup.sh                     # Interactive: prompts for bot token + chat ID
 #   ./setup.sh --token XXX --chat YYY  # Non-interactive
+#   ./setup.sh --uninstall         # Remove all installed components
 #
 # What it does:
 #   1. Copies notify.py to ~/.claude/hooks/
@@ -21,14 +22,113 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 TOKEN=""
 CHAT=""
+UNINSTALL=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --token) TOKEN="$2"; shift 2 ;;
-        --chat)  CHAT="$2";  shift 2 ;;
-        *)       echo "Unknown arg: $1"; exit 1 ;;
+        --token)     TOKEN="$2"; shift 2 ;;
+        --chat)      CHAT="$2";  shift 2 ;;
+        --uninstall) UNINSTALL=true; shift ;;
+        *)           echo "Unknown arg: $1"; exit 1 ;;
     esac
 done
+
+# ── Uninstall mode ──────────────────────────────────────────────────────────
+
+if [[ "$UNINSTALL" == "true" ]]; then
+    echo "──────────────────────────────────────────────"
+    echo "  Uninstalling Claude Code Telegram Hooks"
+    echo "──────────────────────────────────────────────"
+    echo ""
+
+    # Remove hook scripts
+    for f in "$HOME/.claude/hooks/notify.py" "$HOME/.claude/hooks/toggle.sh"; do
+        if [[ -f "$f" ]]; then
+            rm -f "$f"
+            echo "  Removed $f"
+        fi
+    done
+
+    # Remove slash command
+    if [[ -f "$HOME/.claude/commands/notify.md" ]]; then
+        rm -f "$HOME/.claude/commands/notify.md"
+        echo "  Removed ~/.claude/commands/notify.md"
+    fi
+
+    # Remove hooks from settings.json
+    if [[ -f "$SETTINGS_FILE" ]]; then
+        python3 - "$SETTINGS_FILE" << 'PYEOF'
+import json
+import sys
+
+settings_path = sys.argv[1]
+with open(settings_path) as f:
+    settings = json.load(f)
+
+hooks = settings.get("hooks", {})
+changed = False
+for event in list(hooks.keys()):
+    matchers = hooks[event]
+    filtered = []
+    for matcher in matchers:
+        hook_list = matcher.get("hooks", [])
+        hook_list = [h for h in hook_list if "notify.py" not in h.get("command", "")]
+        if hook_list:
+            matcher["hooks"] = hook_list
+            filtered.append(matcher)
+    if filtered:
+        hooks[event] = filtered
+    else:
+        del hooks[event]
+        changed = True
+
+if hooks:
+    settings["hooks"] = hooks
+elif "hooks" in settings:
+    del settings["hooks"]
+
+with open(settings_path, "w") as f:
+    json.dump(settings, f, indent=2)
+print("  Cleaned notify hooks from settings.json")
+PYEOF
+    fi
+
+    # Remove env vars and aliases from shell profile
+    PROFILE=""
+    if [[ -f "$HOME/.zshrc" ]]; then
+        PROFILE="$HOME/.zshrc"
+    elif [[ -f "$HOME/.bashrc" ]]; then
+        PROFILE="$HOME/.bashrc"
+    elif [[ -f "$HOME/.bash_profile" ]]; then
+        PROFILE="$HOME/.bash_profile"
+    fi
+
+    if [[ -n "$PROFILE" ]]; then
+        grep -v "TELEGRAM_BOT_TOKEN\|TELEGRAM_CHAT_ID\|# Claude Code Telegram\|alias notify-on\|alias notify-off\|alias notify-status" "$PROFILE" > "$PROFILE.tmp" || true
+        mv "$PROFILE.tmp" "$PROFILE"
+        echo "  Cleaned env vars and aliases from $PROFILE"
+    fi
+
+    # Remove state directory
+    if [[ -d "$HOME/.claude/notify-state" ]]; then
+        rm -rf "$HOME/.claude/notify-state"
+        echo "  Removed ~/.claude/notify-state/"
+    fi
+
+    # Remove sentinel files
+    rm -f "$HOME/.claude/notify-enabled"
+    rm -f "$HOME/.claude/notify-enabled".*
+    echo "  Removed sentinel files"
+
+    echo ""
+    echo "  Note: ~/.claude/notify-projects.json preserved (user config)"
+    echo ""
+    echo "──────────────────────────────────────────────"
+    echo "  Uninstall complete."
+    echo "  Restart your shell or run: source $PROFILE"
+    echo "──────────────────────────────────────────────"
+    exit 0
+fi
 
 # ── Interactive prompts if needed ────────────────────────────────────────────
 
@@ -153,7 +253,7 @@ fi
 
 if [[ -n "$PROFILE" ]]; then
     # Remove any existing entries
-    grep -v "TELEGRAM_BOT_TOKEN\|TELEGRAM_CHAT_ID\|# Claude Code Telegram" "$PROFILE" > "$PROFILE.tmp" || true
+    grep -v "TELEGRAM_BOT_TOKEN\|TELEGRAM_CHAT_ID\|# Claude Code Telegram\|alias notify-on\|alias notify-off\|alias notify-status" "$PROFILE" > "$PROFILE.tmp" || true
     mv "$PROFILE.tmp" "$PROFILE"
 
     # Append new entries
