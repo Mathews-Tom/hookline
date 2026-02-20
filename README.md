@@ -1,6 +1,6 @@
 # Claude Code → Telegram Notifications
 
-**Rich Telegram alerts for Claude Code Agent Teams with debouncing, threading, project emojis, and inline mute buttons.**
+**Rich Telegram alerts for Claude Code sessions — debouncing, threading, project emojis, inline controls, transcript queries, and tool approval.**
 
 Notifications are **OFF by default**. Toggle on per-project when starting long runs, toggle off when done.
 
@@ -12,6 +12,7 @@ Notifications are **OFF by default**. Toggle on per-project when starting long r
 ┌─ ✅ Stop ─────── 🔮 pramana
 │ Team disbanded. The report covers architecture,
 │ every feature's working status, security issues…
+│ 🔧 47 tool calls: 12 Bash, 9 Read, 8 Edit, 6 Grep, 5 Glob
 └─ 18:52 UTC ── ⏱ 42m
 ```
 
@@ -23,23 +24,19 @@ Notifications are **OFF by default**. Toggle on per-project when starting long r
 └─ 18:49 UTC ── ⏱ 39m
 ```
 
-**Debounced events** (SubagentStop, TeammateIdle) are batched into compact single-liners:
+**Debounced events** (SubagentStop, TeammateIdle) are batched into compact one-liners:
 
 ```
 📋 ×4 subagents finished · 🔮 pramana · 18:10–18:52 UTC
 💤 challenger, researcher-1 idle · 🔮 pramana · 18:50 UTC
 ```
 
-**Before vs After**:
+**Inline buttons** appear on every notification:
 
-| Before (v1) | After (v2) |
-|---|---|
-| 8 separate flat messages in 2 minutes | 4 messages: 1 batched + 3 full events |
-| No visual hierarchy | Box drawing for important events |
-| "SubagentStop · pramana" ×4 | "×4 subagents finished" once |
-| No duration info | ⏱ 42m session timer |
-| Plain project name | 🔮 project emoji |
-| Scattered in chat | Threaded under first message |
+```
+[🔇 Mute 30m]  [🔇 Mute Project]
+[📌 New Thread]
+```
 
 ---
 
@@ -67,11 +64,16 @@ You                          Claude Code                    Your Phone
  │  (you come back)               │                              │
  │                                ├─ [Stop fires] ──────────────►│ ┌─ ✅ Stop ──── 🔮
  │                                │                              │   ⏱ 42m session
+ │                                │                              │
+ ├─ /notify reset ───────────────►│  (start new thread)          │
+ ├─ "New task..."────────────────►│                              │
+ │                                ├─ [Notification fires] ──────►│ ┌─ ⏳ New thread ──── 🔮
+ │                                │                              │
  ├─ /notify off ─────────────────►│                              │
  │  🔕 OFF for pramana            │                              │
 ```
 
-All messages in a session are **threaded under the first message** — keeps your Telegram chat clean.
+All messages in a session are **threaded under the first message** — keeps your Telegram chat clean. Use `/notify reset` or the `📌 New Thread` button between task runs to start a fresh thread.
 
 ### Toggle from Any Interface
 
@@ -88,6 +90,8 @@ All messages in a session are **threaded under the first message** — keeps you
 /notify on attest       Enable for attest specifically
 /notify off             Disable current project
 /notify off all         Clear everything
+/notify reset           Start a new thread (between task runs)
+/notify reset all       Reset threads for all projects
 /notify status          Show what's enabled
 ```
 
@@ -103,10 +107,10 @@ notify-status
 
 ## Features
 
-### 1. HTML Formatting with Box Drawing
-Full events use `<blockquote>` for indented body text and Unicode box-drawing for visual weight. Switched from MarkdownV2 to HTML for richer formatting options.
+### HTML Formatting with Box Drawing
+Full events use `<blockquote>` for indented body text and Unicode box-drawing for visual weight. Stop events include transcript summaries — last assistant messages, tool call counts, and detected errors.
 
-### 2. Project Emoji Mapping
+### Project Emoji Mapping
 
 Configure per-project emojis in `~/.claude/notify-projects.json`:
 
@@ -115,14 +119,12 @@ Configure per-project emojis in `~/.claude/notify-projects.json`:
   "attest": "🧪",
   "cairn": "🪨",
   "swarmlens": "🔭",
-  "no-magic": "✨",
-  "tether": "🔗",
   "pramana": "🔮"
 }
 ```
 Messages show `🔮 pramana` instead of plain `pramana`. Scannable at a glance when multiple projects are active.
 
-### 3. Session Duration
+### Session Duration
 
 The footer shows elapsed time since you toggled notifications on:
 
@@ -132,9 +134,9 @@ The footer shows elapsed time since you toggled notifications on:
 
 Reads the timestamp from the sentinel file — zero additional state.
 
-### 4. Debouncing
+### Debouncing
 
-SubagentStop and TeammateIdle events are batched within a 30-second window. Instead of 4 separate "Subagent finished" messages, you get one:
+SubagentStop and TeammateIdle events are batched within a configurable window (default 30s). Instead of 4 separate "Subagent finished" messages:
 
 ```text
 📋 ×4 subagents finished · 🔮 pramana · 18:10–18:52 UTC
@@ -142,13 +144,7 @@ SubagentStop and TeammateIdle events are batched within a 30-second window. Inst
 
 Batches flush when: a non-debounced event arrives, the batch ages past the window, or the session ends (Stop).
 
-Configure the window: `export CLAUDE_NOTIFY_DEBOUNCE=60` (default: 30 seconds)
-
-### 5. Compact Mode
-
-Low-value events (TeammateIdle when standalone) get single-line format. High-value events (Stop, TaskCompleted, Notification) get the full box-drawing treatment.
-
-### 6. Task Progress
+### Task Progress
 
 TaskCompleted events track cumulative progress per session:
 
@@ -159,23 +155,71 @@ TaskCompleted events track cumulative progress per session:
 └─ 18:49 UTC ── ⏱ 39m
 ```
 
-Counter resets when the session ends (Stop event).
+Counter resets on Stop or thread reset.
 
-### 7. Thread Grouping
+### Thread Grouping
 
-All messages from a session are threaded under the first message via Telegram's `reply_to_message_id`. Keeps your chat clean — one thread per Agent Team run instead of scattered messages.
+All messages from a session are threaded under the first message via Telegram's `reply_to_message_id`. One thread per task run instead of scattered messages.
 
-### 8. Inline Mute Buttons
-Messages include `[🔇 Mute 30m]` and `[🔇 Mute Project]` buttons. Requires the optional button server:
-```bash
-export CLAUDE_NOTIFY_BUTTONS=1
-python3 ~/.claude/hooks/notify.py --serve &
+Use `/notify reset` (CLI) or `📌 New Thread` (Telegram button) between task runs within the same session to start a new thread. This clears thread state, task counters, and pending debounce batches.
+
+### Inline Buttons
+
+Every notification includes inline buttons handled by the serve daemon (auto-started via launchd):
+
+| Button | Action |
+|--------|--------|
+| `🔇 Mute 30m` | Suppress notifications for 30 minutes |
+| `🔇 Mute Project` | Disable the project sentinel entirely |
+| `📌 New Thread` | Clear thread state — next notification starts a new thread |
+
+Buttons are **on by default**. Disable via config: `"show_buttons": false`.
+
+### Transcript Queries
+
+Reply to any notification in Telegram with a command to query the session transcript:
+
+| Command | Output |
+|---------|--------|
+| `log` / `details` | Last 3 assistant messages with tool summary |
+| `full` | Upload transcript tail as `.txt` document |
+| `errors` | Extract and send only error blocks |
+| `tools` | Bar chart of all tool calls by type |
+| `help` | List available commands |
+
+### Tool Approval (Opt-in)
+
+PreToolUse hook integration: Claude Code pauses before running a tool, sends an approval request to Telegram with inline `✅ Approve` / `❌ Block` buttons, and blocks until you respond or the timeout expires.
+
+```text
+┌─ 🔐 Approval Required ─────── 🔮 pramana
+│ Tool: Bash
+│ rm -rf /tmp/build-artifacts
+│ Session: 12m active
+└─ ⏳ Waiting (120s timeout)
 ```
-The server long-polls Telegram for button presses and handles mute state.
 
-### 9. Event Suppression
+Auto-blocks on timeout. Enable via config: `"approval_enabled": true`.
 
-Suppress specific events: `export CLAUDE_NOTIFY_SUPPRESS="SubagentStop,TeammateIdle"`
+### Event Suppression
+
+Suppress specific events so they never trigger notifications:
+
+```json
+{ "suppress": ["SubagentStop", "TeammateIdle"] }
+```
+
+Or via env var: `CLAUDE_NOTIFY_SUPPRESS="SubagentStop,TeammateIdle"`
+
+### Minimum Session Age
+
+Ignore notifications from sessions younger than a threshold. Prevents alerts from quick one-off commands:
+
+```json
+{ "min_session_age": 60 }
+```
+
+Notifications only fire after the session has been active for 60+ seconds.
 
 ---
 
@@ -198,44 +242,90 @@ Suppress specific events: `export CLAUDE_NOTIFY_SUPPRESS="SubagentStop,TeammateI
    │     └─ No sentinel → exit (sub-ms)        │
    │  3. Mute check: button-muted?             │
    │     └─ Muted → exit                       │
-   │  4. Debounce: SubagentStop/TeammateIdle?  │
+   │  4. Suppress check: event filtered?       │
+   │     └─ Suppressed → exit                  │
+   │  5. Session age check                     │
+   │  6. Debounce: SubagentStop/TeammateIdle?  │
    │     └─ Accumulate → exit (don't send yet) │
-   │  5. Flush stale batches                   │
-   │  6. Format: HTML + box drawing            │
-   │  7. Send: thread grouping + buttons       │
-   │  8. Stop? Clean up session state          │
+   │  7. Flush stale batches                   │
+   │  8. Format: HTML + box drawing            │
+   │  9. Send: thread grouping + buttons       │
+   │ 10. Stop? Clean up session state          │
    └──────────────────┬────────────────────────┘
                       ▼
               Telegram Bot API
                       │
-        ┌─────────────┼─────────────┐
-        ▼             ▼             ▼
-   Your Phone    Thread Group   [🔇 Mute]
-                                    │
-                              notify.py --serve
-                             (button callback handler)
+        ┌─────────────┼──────────────────────┐
+        ▼             ▼                      ▼
+   Your Phone    Thread Group     notify.py --serve
+                                 (launchd daemon)
+                                       │
+                         ┌─────────────┼─────────────┐
+                         ▼             ▼             ▼
+                    [🔇 Mute]   [📌 Thread]   Reply Commands
+                                              (log, full, errors, tools)
 ```
+
+### Configuration
+
+Settings are read with three-tier precedence: **env var → config file → hardcoded default**.
+
+Credentials (secrets) are always env vars. Preferences live in `~/.claude/notify-config.json`:
+
+```json
+{
+  "show_buttons": true,
+  "debounce_window": 30,
+  "suppress": [],
+  "min_session_age": 0,
+  "approval_enabled": false,
+  "approval_user": "",
+  "approval_timeout": 120
+}
+```
+
+| Setting | Config Key | Env Override | Default |
+|---------|-----------|-------------|---------|
+| Show inline buttons | `show_buttons` | `CLAUDE_NOTIFY_BUTTONS=1/0` | `true` |
+| Debounce window (seconds) | `debounce_window` | `CLAUDE_NOTIFY_DEBOUNCE` | `30` |
+| Suppressed events | `suppress` | `CLAUDE_NOTIFY_SUPPRESS` | `[]` |
+| Min session age (seconds) | `min_session_age` | `CLAUDE_NOTIFY_MIN_AGE` | `0` |
+| Enable tool approval | `approval_enabled` | `CLAUDE_NOTIFY_APPROVAL=1/0` | `false` |
+| Authorized approval user | `approval_user` | `CLAUDE_NOTIFY_APPROVAL_USER` | chat ID |
+| Approval timeout (seconds) | `approval_timeout` | `CLAUDE_NOTIFY_APPROVAL_TIMEOUT` | `120` |
+
+Credentials (required, env vars only):
+
+| Variable | Description |
+|----------|-------------|
+| `TELEGRAM_BOT_TOKEN` | Bot token from @BotFather |
+| `TELEGRAM_CHAT_ID` | Your Telegram chat ID |
 
 ### State Files
 
 ```text
 ~/.claude/
 ├── notify-enabled.pramana          # Sentinel: ON for pramana
-├── notify-projects.json            # Emoji mapping
+├── notify-config.json              # User preferences (buttons, debounce, etc.)
+├── notify-projects.json            # Project emoji mapping
 ├── notify-state/
+│   ├── serve.pid                   # Daemon PID file
+│   ├── audit.jsonl                 # Tool approval audit log
 │   └── pramana/
 │       ├── debounce.json           # Pending batched events
 │       ├── thread.json             # First message_id for threading
 │       ├── tasks.json              # Completed task tracker
 │       └── mute.json               # Mute-until timestamp
-└── hooks/
-    ├── notify.py                   # Hook handler (753 lines)
-    └── toggle.sh                   # On/off/status toggle
+├── hooks/
+│   ├── notify.py                   # Hook handler + serve daemon
+│   └── toggle.sh                   # On/off/reset/status toggle
+└── commands/
+    └── notify.md                   # /notify slash command
 ```
 
 ---
 
-## Setup (5 minutes)
+## Setup
 
 ### Prerequisites
 - Python 3.10+ (stdlib only, zero dependencies)
@@ -258,13 +348,15 @@ git clone <this-repo> && cd claude-telegram-hooks
 
 Installs:
 
-- `~/.claude/hooks/notify.py` — hook handler
-- `~/.claude/hooks/toggle.sh` — on/off/status toggle
+- `~/.claude/hooks/notify.py` — hook handler + serve daemon
+- `~/.claude/hooks/toggle.sh` — on/off/reset/status toggle
 - `~/.claude/commands/notify.md` — `/notify` slash command
+- `~/.claude/notify-config.json` — notification preferences
 - `~/.claude/notify-projects.json` — project emoji config
 - `~/.claude/notify-state/` — state directory
 - Hook config → `~/.claude/settings.json`
-- Shell aliases → `~/.zshrc`
+- Credentials + aliases → `~/.zshrc`
+- Serve daemon → `~/Library/LaunchAgents/com.claude.notify-serve.plist` (auto-start)
 
 ### 3. Verify
 ```bash
@@ -275,10 +367,10 @@ echo '{"hook_event_name":"Stop","cwd":"/test/pramana"}' | python3 ~/.claude/hook
 notify-off
 ```
 
-### 4. Customize Project Emojis
+### 4. Customize
 
-```bash
-# Edit ~/.claude/notify-projects.json
+**Project emojis** — `~/.claude/notify-projects.json`:
+```json
 {
   "attest": "🧪",
   "cairn": "🪨",
@@ -286,79 +378,40 @@ notify-off
 }
 ```
 
-### 5. Enable Inline Buttons (Optional)
+**Notification preferences** — `~/.claude/notify-config.json`:
+```json
+{
+  "show_buttons": true,
+  "debounce_window": 30,
+  "suppress": ["SubagentStop"],
+  "min_session_age": 60
+}
+```
+
+### Uninstall
 
 ```bash
-# Add to ~/.zshrc
-export CLAUDE_NOTIFY_BUTTONS=1
-
-# Start the button server (background)
-python3 ~/.claude/hooks/notify.py --serve &
-
-# Or use launchd (macOS) for auto-start — see below
+./setup.sh --uninstall
 ```
+
+Removes all installed components. Preserves `notify-projects.json` (user config).
 
 ---
 
-## Button Server (Optional)
+## Serve Daemon
 
-The button server handles inline mute button presses. Without it, notifications work fine — you just won't see the mute buttons.
-
-### Quick Start
+The serve daemon handles inline button presses, transcript reply commands, and tool approval callbacks. It is **auto-installed via launchd** during setup and starts on login.
 
 ```bash
-export CLAUDE_NOTIFY_BUTTONS=1
+# Manual start (if not using launchd)
 python3 ~/.claude/hooks/notify.py --serve
-# [notify-serve] Button server started. Polling for callbacks...
+
+# Check status
+/notify status
+# → 🟢 Serve daemon: running (PID 12345)
 ```
 
-### launchd Auto-Start (macOS)
-
-Create `~/Library/LaunchAgents/com.claude.notify-serve.plist`:
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.claude.notify-serve</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/usr/bin/python3</string>
-        <string>${HOME}/.claude/hooks/notify.py</string>
-        <string>--serve</string>
-    </array>
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>TELEGRAM_BOT_TOKEN</key>
-        <string>YOUR_TOKEN</string>
-        <key>TELEGRAM_CHAT_ID</key>
-        <string>YOUR_CHAT_ID</string>
-    </dict>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-</dict>
-</plist>
-```
-
-```bash
-launchctl load ~/Library/LaunchAgents/com.claude.notify-serve.plist
-```
-
----
-
-## Configuration Reference
-
-| Variable | Default | Description |
-|---|---|---|
-| `TELEGRAM_BOT_TOKEN` | — | Bot token from @BotFather (required) |
-| `TELEGRAM_CHAT_ID` | — | Your chat ID (required) |
-| `CLAUDE_NOTIFY_SUPPRESS` | — | Comma-separated events to suppress |
-| `CLAUDE_NOTIFY_MIN_AGE` | `0` | Min session age (seconds) before notifying |
-| `CLAUDE_NOTIFY_BUTTONS` | `0` | Set to `1` to show inline mute buttons |
-| `CLAUDE_NOTIFY_DEBOUNCE` | `30` | Debounce window in seconds |
+Logs: `~/.claude/notify-state/serve.{stdout,stderr}.log`
 
 ---
 
@@ -374,7 +427,7 @@ Hooks fire deterministically. The toggle, debounce, and mute logic all happen in
 
 ## Zero Dependencies
 
-Python stdlib only: `json`, `urllib`, `sys`, `os`, `pathlib`, `time`, `re`. No pip install, no venvs, no version conflicts.
+Python stdlib only: `json`, `urllib`, `sys`, `os`, `pathlib`, `time`, `fcntl`, `select`. No pip install, no venvs, no version conflicts.
 
 ## License
 

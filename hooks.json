@@ -49,6 +49,16 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/hooks/notify.py"
+          }
+        ]
+      }
     ]
   }
 }

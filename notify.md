@@ -14,6 +14,8 @@ Examples:
 - `/notify on attest` → enable for attest specifically
 - `/notify off` → disable for current project
 - `/notify off all` → disable all notifications
+- `/notify reset` → start a new Telegram thread (use between task runs)
+- `/notify reset all` → reset threads for all projects
 - `/notify status` → show what's enabled
 
 After running, report the single line of output and nothing else.

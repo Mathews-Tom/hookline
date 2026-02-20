@@ -4,6 +4,7 @@
 # Usage:
 #   ./setup.sh                     # Interactive: prompts for bot token + chat ID
 #   ./setup.sh --token XXX --chat YYY  # Non-interactive
+#   ./setup.sh --update            # Re-run setup, reuse existing credentials
 #   ./setup.sh --uninstall         # Remove all installed components
 #
 # What it does:
@@ -23,12 +24,14 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TOKEN=""
 CHAT=""
 UNINSTALL=false
+UPDATE=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --token)     TOKEN="$2"; shift 2 ;;
         --chat)      CHAT="$2";  shift 2 ;;
         --uninstall) UNINSTALL=true; shift ;;
+        --update)    UPDATE=true; shift ;;
         *)           echo "Unknown arg: $1"; exit 1 ;;
     esac
 done
@@ -109,6 +112,20 @@ PYEOF
         echo "  Cleaned env vars and aliases from $PROFILE"
     fi
 
+    # Unload and remove launchd plist
+    PLIST="$HOME/Library/LaunchAgents/com.claude.notify-serve.plist"
+    if [[ -f "$PLIST" ]]; then
+        launchctl unload "$PLIST" 2>/dev/null || true
+        rm -f "$PLIST"
+        echo "  Removed launchd agent (com.claude.notify-serve)"
+    fi
+
+    # Remove config file
+    if [[ -f "$HOME/.claude/notify-config.json" ]]; then
+        rm -f "$HOME/.claude/notify-config.json"
+        echo "  Removed ~/.claude/notify-config.json"
+    fi
+
     # Remove state directory
     if [[ -d "$HOME/.claude/notify-state" ]]; then
         rm -rf "$HOME/.claude/notify-state"
@@ -128,6 +145,51 @@ PYEOF
     echo "  Restart your shell or run: source $PROFILE"
     echo "──────────────────────────────────────────────"
     exit 0
+fi
+
+# ── Extract existing credentials (--update mode) ──────────────────────────
+
+if [[ "$UPDATE" == "true" && ( -z "$TOKEN" || -z "$CHAT" ) ]]; then
+    _extract_from_profile() {
+        local profile="$1"
+        [[ -f "$profile" ]] || return 0
+        if [[ -z "$TOKEN" ]]; then
+            TOKEN=$(sed -n 's/^export TELEGRAM_BOT_TOKEN="\(.*\)"/\1/p' "$profile" 2>/dev/null | head -1)
+        fi
+        if [[ -z "$CHAT" ]]; then
+            CHAT=$(sed -n 's/^export TELEGRAM_CHAT_ID="\(.*\)"/\1/p' "$profile" 2>/dev/null | head -1)
+        fi
+    }
+
+    # 1. Shell profiles
+    _extract_from_profile "$HOME/.zshrc"
+    _extract_from_profile "$HOME/.bashrc"
+    _extract_from_profile "$HOME/.bash_profile"
+
+    # 2. Installed launchd plist
+    _PLIST="$HOME/Library/LaunchAgents/com.claude.notify-serve.plist"
+    if [[ -f "$_PLIST" ]]; then
+        if [[ -z "$TOKEN" ]]; then
+            TOKEN=$(sed -n '/TELEGRAM_BOT_TOKEN/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' "$_PLIST" 2>/dev/null | head -1)
+        fi
+        if [[ -z "$CHAT" ]]; then
+            CHAT=$(sed -n '/TELEGRAM_CHAT_ID/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' "$_PLIST" 2>/dev/null | head -1)
+        fi
+    fi
+
+    # 3. Current environment
+    if [[ -z "$TOKEN" ]]; then TOKEN="${TELEGRAM_BOT_TOKEN:-}"; fi
+    if [[ -z "$CHAT" ]]; then CHAT="${TELEGRAM_CHAT_ID:-}"; fi
+
+    # Report what we found
+    if [[ -n "$TOKEN" && -n "$CHAT" ]]; then
+        _masked_token="${TOKEN%%:*}:${TOKEN#*:}"
+        _after_colon="${_masked_token#*:}"
+        _masked_token="${_masked_token%%:*}:${_after_colon:0:3}***"
+        echo "→ Reusing existing Telegram credentials"
+        echo "  Token: $_masked_token"
+        echo "  Chat:  $CHAT"
+    fi
 fi
 
 # ── Interactive prompts if needed ────────────────────────────────────────────
@@ -185,6 +247,27 @@ if [[ ! -f "$PROJECT_CONFIG" ]]; then
     echo "  Edit $PROJECT_CONFIG to customize project emojis"
 else
     echo "→ Project config already exists at $PROJECT_CONFIG (skipping)"
+fi
+
+# ── Install notification config (if not already present) ─────────────────────
+
+CONFIG_FILE="$HOME/.claude/notify-config.json"
+if [[ ! -f "$CONFIG_FILE" ]]; then
+    echo "→ Installing default notification config"
+    cat > "$CONFIG_FILE" << 'JSONEOF'
+{
+  "show_buttons": true,
+  "debounce_window": 30,
+  "suppress": [],
+  "min_session_age": 0,
+  "approval_enabled": false,
+  "approval_user": "",
+  "approval_timeout": 120
+}
+JSONEOF
+    echo "  Edit $CONFIG_FILE to customize settings"
+else
+    echo "→ Config already exists at $CONFIG_FILE (skipping)"
 fi
 
 # ── Create state directory ───────────────────────────────────────────────────
@@ -301,9 +384,31 @@ else
     exit 1
 fi
 
+# ── Install serve daemon (launchd) ───────────────────────────────────────
+
+PLIST_SRC="$SCRIPT_DIR/com.claude.notify-serve.plist"
+PLIST_DST="$HOME/Library/LaunchAgents/com.claude.notify-serve.plist"
+
+echo ""
+echo "→ Installing serve daemon (launchd)"
+mkdir -p "$HOME/Library/LaunchAgents"
+
+# Generate plist with actual values substituted
+sed -e "s|__HOOKS_DIR__|$HOOKS_DIR|g" \
+    -e "s|__BOT_TOKEN__|$TOKEN|g" \
+    -e "s|__CHAT_ID__|$CHAT|g" \
+    -e "s|__HOME__|$HOME|g" \
+    "$PLIST_SRC" > "$PLIST_DST"
+
+# Unload old version if running, then load new
+launchctl unload "$PLIST_DST" 2>/dev/null || true
+launchctl load "$PLIST_DST"
+echo "  Installed and started com.claude.notify-serve"
+echo "  Logs: ~/.claude/notify-state/serve.{stdout,stderr}.log"
+
 echo ""
 echo "──────────────────────────────────────────────"
-echo "  ✅ Setup complete!"
+echo "  Setup complete!"
 echo ""
 echo "  Notifications are OFF by default."
 echo "  Toggle them when starting long runs:"
@@ -320,12 +425,16 @@ echo "      notify-on           Enable for current dir's project"
 echo "      notify-off          Disable for current dir's project"
 echo "      notify-status       Show all active sentinels"
 echo ""
+echo "  Settings:"
+echo "    Edit ~/.claude/notify-config.json"
+echo "    (buttons, debounce, suppress, approval — env vars override)"
+echo ""
 echo "  Project emojis:"
 echo "    Edit ~/.claude/notify-projects.json"
 echo ""
-echo "  Inline mute buttons (optional):"
-echo "    export CLAUDE_NOTIFY_BUTTONS=1"
-echo "    python3 ~/.claude/hooks/notify.py --serve &"
+echo "  Serve daemon (auto-started via launchd):"
+echo "    Handles mute buttons, reply commands, tool approval"
+echo "    Reply to any notification with: log, full, errors, tools"
 echo ""
 echo "  Restart your shell or run: source $PROFILE"
 echo "──────────────────────────────────────────────"
