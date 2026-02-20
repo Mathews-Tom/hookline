@@ -4,6 +4,7 @@
 # Usage:
 #   ./setup.sh                     # Interactive: prompts for bot token + chat ID
 #   ./setup.sh --token XXX --chat YYY  # Non-interactive
+#   ./setup.sh --update            # Re-run setup, reuse existing credentials
 #   ./setup.sh --uninstall         # Remove all installed components
 #
 # What it does:
@@ -23,12 +24,14 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TOKEN=""
 CHAT=""
 UNINSTALL=false
+UPDATE=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --token)     TOKEN="$2"; shift 2 ;;
         --chat)      CHAT="$2";  shift 2 ;;
         --uninstall) UNINSTALL=true; shift ;;
+        --update)    UPDATE=true; shift ;;
         *)           echo "Unknown arg: $1"; exit 1 ;;
     esac
 done
@@ -142,6 +145,51 @@ PYEOF
     echo "  Restart your shell or run: source $PROFILE"
     echo "──────────────────────────────────────────────"
     exit 0
+fi
+
+# ── Extract existing credentials (--update mode) ──────────────────────────
+
+if [[ "$UPDATE" == "true" && ( -z "$TOKEN" || -z "$CHAT" ) ]]; then
+    _extract_from_profile() {
+        local profile="$1"
+        [[ -f "$profile" ]] || return 0
+        if [[ -z "$TOKEN" ]]; then
+            TOKEN=$(sed -n 's/^export TELEGRAM_BOT_TOKEN="\(.*\)"/\1/p' "$profile" 2>/dev/null | head -1)
+        fi
+        if [[ -z "$CHAT" ]]; then
+            CHAT=$(sed -n 's/^export TELEGRAM_CHAT_ID="\(.*\)"/\1/p' "$profile" 2>/dev/null | head -1)
+        fi
+    }
+
+    # 1. Shell profiles
+    _extract_from_profile "$HOME/.zshrc"
+    _extract_from_profile "$HOME/.bashrc"
+    _extract_from_profile "$HOME/.bash_profile"
+
+    # 2. Installed launchd plist
+    _PLIST="$HOME/Library/LaunchAgents/com.claude.notify-serve.plist"
+    if [[ -f "$_PLIST" ]]; then
+        if [[ -z "$TOKEN" ]]; then
+            TOKEN=$(sed -n '/TELEGRAM_BOT_TOKEN/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' "$_PLIST" 2>/dev/null | head -1)
+        fi
+        if [[ -z "$CHAT" ]]; then
+            CHAT=$(sed -n '/TELEGRAM_CHAT_ID/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' "$_PLIST" 2>/dev/null | head -1)
+        fi
+    fi
+
+    # 3. Current environment
+    if [[ -z "$TOKEN" ]]; then TOKEN="${TELEGRAM_BOT_TOKEN:-}"; fi
+    if [[ -z "$CHAT" ]]; then CHAT="${TELEGRAM_CHAT_ID:-}"; fi
+
+    # Report what we found
+    if [[ -n "$TOKEN" && -n "$CHAT" ]]; then
+        _masked_token="${TOKEN%%:*}:${TOKEN#*:}"
+        _after_colon="${_masked_token#*:}"
+        _masked_token="${_masked_token%%:*}:${_after_colon:0:3}***"
+        echo "→ Reusing existing Telegram credentials"
+        echo "  Token: $_masked_token"
+        echo "  Chat:  $CHAT"
+    fi
 fi
 
 # ── Interactive prompts if needed ────────────────────────────────────────────
