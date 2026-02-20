@@ -747,19 +747,90 @@ def _telegram_api(method: str, payload: dict, timeout: int = 10) -> dict | None:
         return None
 
 
+def _get_last_button_msg(project: str) -> int | None:
+    """Get the message_id of the last message with inline buttons."""
+    state = _read_state(project, "last_buttons.json")
+    session = _session_key(project)
+    if state.get("session") == session:
+        return state.get("message_id")
+    return None
+
+
+def _set_last_button_msg(project: str, message_id: int) -> None:
+    """Store the message_id of the latest message with inline buttons."""
+    _write_state(project, "last_buttons.json", {
+        "session": _session_key(project),
+        "message_id": message_id,
+    })
+
+
+def _clear_last_button_msg(project: str) -> None:
+    """Clear the last button message tracking."""
+    _clear_state(project, "last_buttons.json")
+
+
+def _remove_buttons(message_id: int) -> None:
+    """Remove inline buttons from a previously sent message."""
+    _telegram_api("editMessageReplyMarkup", {
+        "chat_id": CHAT_ID,
+        "message_id": message_id,
+        "reply_markup": {"inline_keyboard": []},
+    })
+
+
+def _build_buttons(project: str, is_final: bool) -> dict:
+    """Build inline keyboard markup based on event context.
+
+    Args:
+        project: Project name for callback data.
+        is_final: True for Stop/completion events (no mute-30m, show new-thread).
+    """
+    if is_final:
+        return {
+            "inline_keyboard": [
+                [
+                    {"text": "🔇 Mute Project", "callback_data": f"mute_proj_{project}"},
+                    {"text": "📌 New Thread", "callback_data": f"reset_{project}"},
+                ],
+            ]
+        }
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "🔇 Mute 30m", "callback_data": f"mute_30_{project}"},
+                {"text": "🔇 Mute Project", "callback_data": f"mute_proj_{project}"},
+            ],
+        ]
+    }
+
+
 def send_message(
     text: str,
     project: str = "",
     reply_to: int | None = None,
+    is_final: bool = False,
 ) -> int | None:
     """Send an HTML message. Returns message_id on success, None on failure.
 
     Tries HTML first, falls back to plain text if parsing fails.
-    Optionally adds inline mute buttons and reply_to for threading.
+    Adds context-aware inline buttons and reply_to for threading.
+    Removes buttons from the previous message in the session.
+
+    Args:
+        text: HTML-formatted message body.
+        project: Project name (used for buttons and thread state).
+        reply_to: Message ID to reply to (threading).
+        is_final: True for Stop/completion — shows "Mute Project" + "New Thread".
     """
     if not BOT_TOKEN or not CHAT_ID:
         _log("TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set")
         return None
+
+    # Remove buttons from the previous message before sending new one
+    if SHOW_BUTTONS and project:
+        prev_msg = _get_last_button_msg(project)
+        if prev_msg:
+            _remove_buttons(prev_msg)
 
     payload: dict[str, Any] = {
         "chat_id": CHAT_ID,
@@ -772,21 +843,14 @@ def send_message(
 
     # Inline buttons (only if button server is enabled)
     if SHOW_BUTTONS and project:
-        payload["reply_markup"] = {
-            "inline_keyboard": [
-                [
-                    {"text": "🔇 Mute 30m", "callback_data": f"mute_30_{project}"},
-                    {"text": "🔇 Mute Project", "callback_data": f"mute_proj_{project}"},
-                ],
-                [
-                    {"text": "📌 New Thread", "callback_data": f"reset_{project}"},
-                ],
-            ]
-        }
+        payload["reply_markup"] = _build_buttons(project, is_final)
 
     result = _telegram_api("sendMessage", payload)
     if result and result.get("ok"):
-        return result["result"]["message_id"]
+        msg_id = result["result"]["message_id"]
+        if SHOW_BUTTONS and project:
+            _set_last_button_msg(project, msg_id)
+        return msg_id
 
     # Fallback: strip HTML and send plain text
     _log("HTML send failed, trying plain text fallback")
@@ -801,7 +865,10 @@ def send_message(
 
     result = _telegram_api("sendMessage", fallback_payload)
     if result and result.get("ok"):
-        return result["result"]["message_id"]
+        msg_id = result["result"]["message_id"]
+        if SHOW_BUTTONS and project:
+            _set_last_button_msg(project, msg_id)
+        return msg_id
 
     _log("Plain text fallback also failed")
     return None
@@ -1586,13 +1653,14 @@ def main() -> None:
         if batch_msg:
             _send_threaded(batch_msg, project, transcript_path)
 
-        # Send the Stop message itself
+        # Send the Stop message itself (final = no mute-30m, show new-thread)
         msg = format_full(event_name, event, project)
-        _send_threaded(msg, project, transcript_path)
+        _send_threaded(msg, project, transcript_path, is_final=True)
 
         # Clean up session state
         _clear_tasks(project)
         _clear_thread(project)
+        _clear_last_button_msg(project)
         _clear_state(project, "debounce.json")
         return
 
@@ -1611,10 +1679,15 @@ def main() -> None:
     _send_threaded(msg, project, transcript_path)
 
 
-def _send_threaded(text: str, project: str, transcript_path: str = "") -> None:
+def _send_threaded(
+    text: str,
+    project: str,
+    transcript_path: str = "",
+    is_final: bool = False,
+) -> None:
     """Send a message with thread grouping."""
     reply_to = _get_thread_id(project)
-    message_id = send_message(text, project=project, reply_to=reply_to)
+    message_id = send_message(text, project=project, reply_to=reply_to, is_final=is_final)
 
     if message_id and reply_to is None:
         # First message in session — store for threading
