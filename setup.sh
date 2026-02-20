@@ -109,6 +109,20 @@ PYEOF
         echo "  Cleaned env vars and aliases from $PROFILE"
     fi
 
+    # Unload and remove launchd plist
+    PLIST="$HOME/Library/LaunchAgents/com.claude.notify-serve.plist"
+    if [[ -f "$PLIST" ]]; then
+        launchctl unload "$PLIST" 2>/dev/null || true
+        rm -f "$PLIST"
+        echo "  Removed launchd agent (com.claude.notify-serve)"
+    fi
+
+    # Remove config file
+    if [[ -f "$HOME/.claude/notify-config.json" ]]; then
+        rm -f "$HOME/.claude/notify-config.json"
+        echo "  Removed ~/.claude/notify-config.json"
+    fi
+
     # Remove state directory
     if [[ -d "$HOME/.claude/notify-state" ]]; then
         rm -rf "$HOME/.claude/notify-state"
@@ -185,6 +199,27 @@ if [[ ! -f "$PROJECT_CONFIG" ]]; then
     echo "  Edit $PROJECT_CONFIG to customize project emojis"
 else
     echo "→ Project config already exists at $PROJECT_CONFIG (skipping)"
+fi
+
+# ── Install notification config (if not already present) ─────────────────────
+
+CONFIG_FILE="$HOME/.claude/notify-config.json"
+if [[ ! -f "$CONFIG_FILE" ]]; then
+    echo "→ Installing default notification config"
+    cat > "$CONFIG_FILE" << 'JSONEOF'
+{
+  "show_buttons": true,
+  "debounce_window": 30,
+  "suppress": [],
+  "min_session_age": 0,
+  "approval_enabled": false,
+  "approval_user": "",
+  "approval_timeout": 120
+}
+JSONEOF
+    echo "  Edit $CONFIG_FILE to customize settings"
+else
+    echo "→ Config already exists at $CONFIG_FILE (skipping)"
 fi
 
 # ── Create state directory ───────────────────────────────────────────────────
@@ -301,9 +336,31 @@ else
     exit 1
 fi
 
+# ── Install serve daemon (launchd) ───────────────────────────────────────
+
+PLIST_SRC="$SCRIPT_DIR/com.claude.notify-serve.plist"
+PLIST_DST="$HOME/Library/LaunchAgents/com.claude.notify-serve.plist"
+
+echo ""
+echo "→ Installing serve daemon (launchd)"
+mkdir -p "$HOME/Library/LaunchAgents"
+
+# Generate plist with actual values substituted
+sed -e "s|__HOOKS_DIR__|$HOOKS_DIR|g" \
+    -e "s|__BOT_TOKEN__|$TOKEN|g" \
+    -e "s|__CHAT_ID__|$CHAT|g" \
+    -e "s|__HOME__|$HOME|g" \
+    "$PLIST_SRC" > "$PLIST_DST"
+
+# Unload old version if running, then load new
+launchctl unload "$PLIST_DST" 2>/dev/null || true
+launchctl load "$PLIST_DST"
+echo "  Installed and started com.claude.notify-serve"
+echo "  Logs: ~/.claude/notify-state/serve.{stdout,stderr}.log"
+
 echo ""
 echo "──────────────────────────────────────────────"
-echo "  ✅ Setup complete!"
+echo "  Setup complete!"
 echo ""
 echo "  Notifications are OFF by default."
 echo "  Toggle them when starting long runs:"
@@ -320,12 +377,16 @@ echo "      notify-on           Enable for current dir's project"
 echo "      notify-off          Disable for current dir's project"
 echo "      notify-status       Show all active sentinels"
 echo ""
+echo "  Settings:"
+echo "    Edit ~/.claude/notify-config.json"
+echo "    (buttons, debounce, suppress, approval — env vars override)"
+echo ""
 echo "  Project emojis:"
 echo "    Edit ~/.claude/notify-projects.json"
 echo ""
-echo "  Inline mute buttons (optional):"
-echo "    export CLAUDE_NOTIFY_BUTTONS=1"
-echo "    python3 ~/.claude/hooks/notify.py --serve &"
+echo "  Serve daemon (auto-started via launchd):"
+echo "    Handles mute buttons, reply commands, tool approval"
+echo "    Reply to any notification with: log, full, errors, tools"
 echo ""
 echo "  Restart your shell or run: source $PROFILE"
 echo "──────────────────────────────────────────────"

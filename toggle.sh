@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# toggle.sh — Enable/disable Telegram notifications, scoped by project.
+# toggle.sh — Enable/disable/reset Telegram notifications, scoped by project.
 #
 # Usage:
-#   toggle.sh on  [project|all]    Enable notifications
-#   toggle.sh off [project|all]    Disable notifications
-#   toggle.sh status               Show what's enabled
-#   toggle.sh                      Toggle current project
+#   toggle.sh on    [project|all]    Enable notifications
+#   toggle.sh off   [project|all]    Disable notifications
+#   toggle.sh reset [project|all]    Start a new thread (between task runs)
+#   toggle.sh status                 Show what's enabled
+#   toggle.sh                        Toggle current project
 #
 # Scoping:
 #   /notify on            → enables for current directory's project name
@@ -79,6 +80,25 @@ _off() {
     fi
 }
 
+_reset() {
+    local project="$1"
+    local state_dir="$HOME/.claude/notify-state"
+    if [[ "$project" == "all" ]]; then
+        # Reset all project state directories
+        for d in "$state_dir"/*/; do
+            [[ -d "$d" ]] || continue
+            rm -f "$d/thread.json" "$d/tasks.json" "$d/debounce.json"
+        done
+        echo "📌 Thread reset (all projects) — next notification starts a new thread"
+    else
+        local pdir="$state_dir/$project"
+        if [[ -d "$pdir" ]]; then
+            rm -f "$pdir/thread.json" "$pdir/tasks.json" "$pdir/debounce.json"
+        fi
+        echo "📌 Thread reset for $project — next notification starts a new thread"
+    fi
+}
+
 _status() {
     local found=false
     # Check global
@@ -101,6 +121,20 @@ _status() {
     if [[ "$found" == "false" ]]; then
         echo "🔕 Notifications are OFF"
     fi
+
+    # Check serve daemon
+    local pid_file="$HOME/.claude/notify-state/serve.pid"
+    if [[ -f "$pid_file" ]]; then
+        local pid
+        pid=$(cat "$pid_file" 2>/dev/null)
+        if kill -0 "$pid" 2>/dev/null; then
+            echo "🟢 Serve daemon: running (PID $pid)"
+        else
+            echo "🔴 Serve daemon: stale PID file (not running)"
+        fi
+    else
+        echo "⚪ Serve daemon: not running"
+    fi
 }
 
 ACTION="${1:-toggle}"
@@ -115,6 +149,10 @@ case "$ACTION" in
         PROJECT=$(_resolve_project "$SCOPE")
         _off "$PROJECT"
         ;;
+    reset)
+        PROJECT=$(_resolve_project "$SCOPE")
+        _reset "$PROJECT"
+        ;;
     status)
         _status
         ;;
@@ -128,7 +166,7 @@ case "$ACTION" in
         fi
         ;;
     *)
-        echo "Usage: toggle.sh [on|off|status|toggle] [project|all]"
+        echo "Usage: toggle.sh [on|off|reset|status|toggle] [project|all]"
         exit 1
         ;;
 esac
