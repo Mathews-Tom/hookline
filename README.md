@@ -2,6 +2,8 @@
 
 **Rich Telegram alerts for Claude Code sessions — debouncing, threading, project emojis, inline controls, transcript queries, and tool approval.**
 
+`claude-notify v3.1.0` — stdlib-only Python package, zero runtime dependencies.
+
 Notifications are **OFF by default**. Toggle on per-project when starting long runs, toggle off when done.
 
 ## What Messages Look Like
@@ -165,7 +167,7 @@ Use `/notify reset` (CLI) or `📌 New Thread` (Telegram button) between task ru
 
 ### Inline Buttons
 
-Every notification includes inline buttons handled by the serve daemon (auto-started via launchd):
+Every notification includes inline buttons handled by the serve daemon:
 
 | Button | Action |
 |--------|--------|
@@ -223,6 +225,47 @@ Notifications only fire after the session has been active for 60+ seconds.
 
 ---
 
+## CLI Flags
+
+The `notify` package supports several CLI flags for development and diagnostics:
+
+```bash
+python3 -m notify --version     # Print version (claude-notify 3.1.0)
+python3 -m notify --dry-run     # Format + print to stdout, no Telegram calls
+python3 -m notify --health      # Run self-diagnostics (7 checks)
+python3 -m notify --serve       # Start the serve daemon (blocking)
+```
+
+### Health Check
+
+`--health` validates your setup in one command:
+
+```text
+claude-notify v3.1.0 health check
+=============================================
+  [+] BOT_TOKEN        OK    7123456:***
+  [+] CHAT_ID          OK    123456789
+  [+] Bot valid        OK    @my_notify_bot
+  [+] Chat reachable   OK    OK
+  [+] State dir        OK    /home/user/.claude/notify-state
+  [+] State files      OK    all valid
+  [-] Serve daemon     FAIL  not running
+=============================================
+  Status: ISSUES DETECTED
+```
+
+Also available via toggle: `toggle.sh doctor`
+
+### Dry Run
+
+`--dry-run` processes events and prints formatted HTML to stdout without making any Telegram API calls. Bypasses the sentinel gate so notifications don't need to be enabled:
+
+```bash
+echo '{"hook_event_name":"Stop","cwd":"/test/demo"}' | python3 -m notify --dry-run
+```
+
+---
+
 ## Architecture
 
 ```text
@@ -232,10 +275,10 @@ Notifications only fire after the session has been active for 60+ seconds.
 │       │              │              │            │
 │  ─────┴──────────────┴──────────────┴──────────  │
 │       Hook Events (deterministic, always fire)   │
-└───────┼──────────┼──────────────────┼────────────┘
-        ▼          ▼                  ▼
+└───────┼──────────────┼──────────────┼────────────┘
+        ▼              ▼              ▼
    ┌───────────────────────────────────────────┐
-   │              notify.py                    │
+   │            notify/ package                │
    │                                           │
    │  1. Read event from stdin                 │
    │  2. Sentinel gate: project or global?     │
@@ -257,13 +300,37 @@ Notifications only fire after the session has been active for 60+ seconds.
                       │
         ┌─────────────┼──────────────────────┐
         ▼             ▼                      ▼
-   Your Phone    Thread Group     notify.py --serve
-                                 (launchd daemon)
+   Your Phone    Thread Group     python3 -m notify --serve
+                                 (launchd / systemd daemon)
                                        │
                          ┌─────────────┼─────────────┐
                          ▼             ▼             ▼
                     [🔇 Mute]   [📌 Thread]   Reply Commands
                                               (log, full, errors, tools)
+```
+
+### Package Structure
+
+```text
+notify/
+├── __init__.py        # v3.1.0, re-exports public API
+├── __main__.py        # CLI dispatch (--version, --health, --dry-run, --serve)
+├── _log.py            # Logging with RotatingFileHandler for serve daemon
+├── _types.py          # TypedDicts for all state files
+├── config.py          # Paths, credentials, _load_config, constants
+├── state.py           # Atomic JSON CRUD with fcntl locking
+├── session.py         # Sentinel detection, age, duration, mute, enabled
+├── project.py         # Project emoji config, labels
+├── transcript.py      # JSONL parsing with mtime-based cache
+├── formatting.py      # HTML formatting, box drawing, _esc, _truncate
+├── debounce.py        # Event batching (accumulate, flush, should_flush)
+├── tasks.py           # TaskCompleted counter per session
+├── threads.py         # Thread ID lifecycle (get/set/clear/find)
+├── buttons.py         # Inline keyboard building, last-button state
+├── telegram.py        # Telegram Bot API transport, send_message
+├── replies.py         # Reply command handlers (log, full, errors, tools)
+├── approval.py        # Tool approval flow (FIFO pipes, audit logging)
+└── serve.py           # Long-poll daemon for buttons, replies, approvals
 ```
 
 ### Configuration
@@ -310,6 +377,7 @@ Credentials (required, env vars only):
 ├── notify-projects.json            # Project emoji mapping
 ├── notify-state/
 │   ├── serve.pid                   # Daemon PID file
+│   ├── serve.log                   # Rotating daemon log (5MB × 3 backups)
 │   ├── audit.jsonl                 # Tool approval audit log
 │   └── pramana/
 │       ├── debounce.json           # Pending batched events
@@ -317,7 +385,7 @@ Credentials (required, env vars only):
 │       ├── tasks.json              # Completed task tracker
 │       └── mute.json               # Mute-until timestamp
 ├── hooks/
-│   ├── notify.py                   # Hook handler + serve daemon
+│   ├── notify/                     # Hook handler package (17 modules)
 │   └── toggle.sh                   # On/off/reset/status toggle
 └── commands/
     └── notify.md                   # /notify slash command
@@ -328,8 +396,9 @@ Credentials (required, env vars only):
 ## Setup
 
 ### Prerequisites
-- Python 3.10+ (stdlib only, zero dependencies)
+- Python 3.10+ (stdlib only, zero runtime dependencies)
 - A Telegram account
+- macOS (launchd) or Linux (systemd) for the serve daemon
 
 ### 1. Create a Telegram Bot
 1. Message [@BotFather](https://t.me/BotFather) on Telegram → `/newbot` → copy the **bot token**
@@ -340,7 +409,7 @@ Credentials (required, env vars only):
 ### 2. Run Setup
 
 ```bash
-git clone <this-repo> && cd claude-telegram-hooks
+git clone <this-repo> && cd claude-hooks-telegram
 ./setup.sh
 # Or non-interactive:
 ./setup.sh --token "YOUR_BOT_TOKEN" --chat "YOUR_CHAT_ID"
@@ -348,7 +417,7 @@ git clone <this-repo> && cd claude-telegram-hooks
 
 Installs:
 
-- `~/.claude/hooks/notify.py` — hook handler + serve daemon
+- `~/.claude/hooks/notify/` — hook handler package
 - `~/.claude/hooks/toggle.sh` — on/off/reset/status toggle
 - `~/.claude/commands/notify.md` — `/notify` slash command
 - `~/.claude/notify-config.json` — notification preferences
@@ -356,15 +425,24 @@ Installs:
 - `~/.claude/notify-state/` — state directory
 - Hook config → `~/.claude/settings.json`
 - Credentials + aliases → `~/.zshrc`
-- Serve daemon → `~/Library/LaunchAgents/com.claude.notify-serve.plist` (auto-start)
+- Serve daemon:
+  - **macOS** → `~/Library/LaunchAgents/com.claude.notify-serve.plist` (auto-start on login)
+  - **Linux** → `~/.config/systemd/user/claude-notify-serve.service` (auto-start on login)
 
 ### 3. Verify
 ```bash
 source ~/.zshrc
 notify-on
-echo '{"hook_event_name":"Stop","cwd":"/test/pramana"}' | python3 ~/.claude/hooks/notify.py
+echo '{"hook_event_name":"Stop","cwd":"/test/pramana"}' | python3 ~/.claude/hooks/notify
 # → Telegram message: ┌─ ✅ Stop ─────── pramana
 notify-off
+```
+
+Run diagnostics:
+```bash
+python3 -m notify --health
+# Or via toggle:
+toggle.sh doctor
 ```
 
 ### 4. Customize
@@ -388,30 +466,84 @@ notify-off
 }
 ```
 
+### Update
+
+Re-run setup to update the package while keeping existing credentials:
+
+```bash
+./setup.sh --update
+```
+
 ### Uninstall
 
 ```bash
 ./setup.sh --uninstall
 ```
 
-Removes all installed components. Preserves `notify-projects.json` (user config).
+Removes all installed components (hooks, daemon, state, env vars). Preserves `notify-projects.json` (user config).
 
 ---
 
 ## Serve Daemon
 
-The serve daemon handles inline button presses, transcript reply commands, and tool approval callbacks. It is **auto-installed via launchd** during setup and starts on login.
+The serve daemon handles inline button presses, transcript reply commands, and tool approval callbacks. It is **auto-installed during setup** and starts on login.
 
+**macOS** — managed via launchd:
 ```bash
-# Manual start (if not using launchd)
-python3 ~/.claude/hooks/notify.py --serve
-
-# Check status
-/notify status
-# → 🟢 Serve daemon: running (PID 12345)
+launchctl list com.claude.notify-serve       # Check status
+launchctl unload ~/Library/LaunchAgents/com.claude.notify-serve.plist  # Stop
+launchctl load ~/Library/LaunchAgents/com.claude.notify-serve.plist    # Start
 ```
 
-Logs: `~/.claude/notify-state/serve.{stdout,stderr}.log`
+**Linux** — managed via systemd user service:
+```bash
+systemctl --user status claude-notify-serve   # Check status
+systemctl --user stop claude-notify-serve     # Stop
+systemctl --user start claude-notify-serve    # Start
+journalctl --user -u claude-notify-serve -f   # Follow logs
+```
+
+**Manual start** (any OS):
+```bash
+python3 -m notify --serve
+# Or: python3 ~/.claude/hooks/notify --serve
+```
+
+Logs rotate automatically: `~/.claude/notify-state/serve.log` (5 MB, 3 backups).
+
+---
+
+## Development
+
+### Test Suite
+
+88 tests across 7 test modules, running in ~0.1s:
+
+```bash
+make test
+# Or: python3 -m pytest tests/ -v
+```
+
+Test modules:
+- `test_config.py` — config precedence (`_cfg_bool`, `_cfg_int`, `_cfg_str`, `_cfg_suppress`)
+- `test_state.py` — JSON CRUD, locking, atomic writes
+- `test_session.py` — sentinel detection, age, duration, mute, enabled
+- `test_formatting.py` — `_esc`, `_truncate`, `_strip_html`, `format_full`, `format_compact`
+- `test_transcript.py` — JSONL parsing, summary extraction, mtime caching
+- `test_debounce.py` — accumulate, flush, timing
+- `test_main.py` — integration event routing, dry-run, version
+
+### Makefile Targets
+
+```bash
+make test       # Run pytest
+make lint       # Ruff check
+make typecheck  # Pyright
+make format     # Ruff format
+make dry-run    # Format a Stop event to stdout
+make health     # Run self-diagnostics
+make install    # Re-install via setup.sh --update
+```
 
 ---
 
@@ -423,11 +555,13 @@ Logs: `~/.claude/notify-state/serve.{stdout,stderr}.log`
 | **MCP Server** | Tool Claude can call → must *decide* to notify | "Probably" |
 | **Hook** | Shell command fired by runtime on lifecycle events | **"Always"** |
 
-Hooks fire deterministically. The toggle, debounce, and mute logic all happen inside `notify.py` — the hook always fires, the script decides whether to send.
+Hooks fire deterministically. The toggle, debounce, and mute logic all happen inside the `notify` package — the hook always fires, the package decides whether to send.
 
 ## Zero Dependencies
 
-Python stdlib only: `json`, `urllib`, `sys`, `os`, `pathlib`, `time`, `fcntl`, `select`. No pip install, no venvs, no version conflicts.
+Python stdlib only: `json`, `urllib`, `sys`, `os`, `pathlib`, `time`, `fcntl`, `select`, `logging`, `errno`, `re`, `uuid`. No pip install, no venvs, no version conflicts.
+
+Dev dependencies (tests only): `pytest`.
 
 ## License
 
