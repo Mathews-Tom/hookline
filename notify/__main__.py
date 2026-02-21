@@ -1,0 +1,181 @@
+"""CLI dispatch for python3 -m notify."""
+from __future__ import annotations
+
+import json
+import sys
+
+from notify import __version__
+from notify._log import log
+from notify.approval import _handle_pre_tool_use, _send_threaded
+from notify.config import (
+    DEBOUNCE_EVENTS,
+    DRY_RUN,
+    FULL_FORMAT_EVENTS,
+    MIN_SESSION_AGE,
+    STATE_DIR,
+    SUPPRESS,
+)
+from notify.buttons import _clear_last_button_msg
+from notify.debounce import _debounce_accumulate, _debounce_flush, _debounce_should_flush
+from notify.formatting import format_compact, format_full
+from notify.session import _extract_project, _is_enabled, _session_age_seconds
+from notify.state import _clear_state, _is_serve_running
+from notify.tasks import _clear_tasks
+from notify.telegram import _telegram_api, send_message
+from notify.threads import _clear_thread
+
+
+def main() -> None:
+    """Hook handler: read event from stdin, format, send with all features."""
+    try:
+        raw = sys.stdin.read()
+        if not raw.strip():
+            log("Empty stdin, nothing to do")
+            return
+        event = json.loads(raw)
+    except json.JSONDecodeError as e:
+        log(f"Invalid JSON on stdin: {e}")
+        return
+
+    project = _extract_project(event)
+    event_name = event.get("hook_event_name", "Unknown")
+    transcript_path = event.get("transcript_path", "")
+
+    if event_name == "PreToolUse":
+        _handle_pre_tool_use(event)
+        return
+
+    if not DRY_RUN and not _is_enabled(project):
+        return
+    if event_name in SUPPRESS:
+        return
+    if MIN_SESSION_AGE > 0:
+        age = _session_age_seconds(project)
+        if age is not None and age < MIN_SESSION_AGE:
+            return
+
+    if _debounce_should_flush(project):
+        batch_msg = _debounce_flush(project)
+        if batch_msg:
+            _send_threaded(batch_msg, project, transcript_path)
+
+    if event_name in DEBOUNCE_EVENTS:
+        _debounce_accumulate(project, event)
+        return
+
+    if event_name == "Stop":
+        batch_msg = _debounce_flush(project)
+        if batch_msg:
+            _send_threaded(batch_msg, project, transcript_path)
+
+        msg = format_full(event_name, event, project)
+        _send_threaded(msg, project, transcript_path, is_final=True)
+
+        _clear_tasks(project)
+        _clear_thread(project)
+        _clear_last_button_msg(project)
+        _clear_state(project, "debounce.json")
+        return
+
+    batch_msg = _debounce_flush(project)
+    if batch_msg:
+        _send_threaded(batch_msg, project, transcript_path)
+
+    if event_name in FULL_FORMAT_EVENTS:
+        msg = format_full(event_name, event, project)
+    else:
+        msg = format_compact(event_name, event, project)
+
+    _send_threaded(msg, project, transcript_path)
+
+
+def health_check() -> None:
+    """Run self-diagnostics and print results."""
+    from notify.config import BOT_TOKEN, CHAT_ID
+
+    checks: list[tuple[str, bool, str]] = []
+
+    has_token = bool(BOT_TOKEN)
+    checks.append(("BOT_TOKEN", has_token, BOT_TOKEN[:8] + "***" if has_token else "not set"))
+
+    has_chat = bool(CHAT_ID)
+    checks.append(("CHAT_ID", has_chat, CHAT_ID if has_chat else "not set"))
+
+    bot_valid = False
+    bot_info = ""
+    if has_token:
+        result = _telegram_api("getMe", {})
+        if result and result.get("ok"):
+            bot_valid = True
+            bot_info = result["result"].get("username", "?")
+        else:
+            bot_info = "API call failed"
+    checks.append(("Bot valid", bot_valid, f"@{bot_info}" if bot_valid else bot_info))
+
+    chat_ok = False
+    if has_token and has_chat:
+        result = _telegram_api("sendChatAction", {"chat_id": CHAT_ID, "action": "typing"})
+        chat_ok = bool(result and result.get("ok"))
+    checks.append(("Chat reachable", chat_ok, "OK" if chat_ok else "unreachable"))
+
+    state_ok = False
+    state_err = ""
+    try:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        test_file = STATE_DIR / ".health_check"
+        test_file.write_text("ok")
+        test_file.unlink()
+        state_ok = True
+    except OSError as e:
+        state_err = str(e)
+    checks.append(("State dir", state_ok, str(STATE_DIR) if state_ok else state_err))
+
+    corrupt_files: list[str] = []
+    if STATE_DIR.exists():
+        for project_dir in STATE_DIR.iterdir():
+            if not project_dir.is_dir():
+                continue
+            for json_file in project_dir.glob("*.json"):
+                try:
+                    json.loads(json_file.read_text())
+                except (json.JSONDecodeError, OSError):
+                    corrupt_files.append(str(json_file.relative_to(STATE_DIR)))
+    state_clean = len(corrupt_files) == 0
+    checks.append(("State files", state_clean,
+                    "all valid" if state_clean else f"corrupt: {', '.join(corrupt_files[:3])}"))
+
+    daemon_running = _is_serve_running()
+    daemon_info = ""
+    if daemon_running:
+        from notify.config import SERVE_PID_FILE
+        try:
+            pid = SERVE_PID_FILE.read_text().strip()
+            daemon_info = f"PID {pid}"
+        except OSError:
+            daemon_info = "running"
+    checks.append(("Serve daemon", daemon_running, daemon_info if daemon_running else "not running"))
+
+    print(f"claude-notify v{__version__} health check")
+    print("=" * 45)
+    all_ok = True
+    for name, ok, detail in checks:
+        status = "OK" if ok else "FAIL"
+        icon = "+" if ok else "-"
+        print(f"  [{icon}] {name:16s} {status:4s}  {detail}")
+        if not ok:
+            all_ok = False
+    print("=" * 45)
+    print("  Status: ALL OK" if all_ok else "  Status: ISSUES DETECTED")
+    sys.exit(0 if all_ok else 1)
+
+
+if __name__ == "__main__":
+    if "--version" in sys.argv:
+        print(f"claude-notify {__version__}")
+    elif "--health" in sys.argv:
+        health_check()
+    elif "--serve" in sys.argv:
+        from notify.serve import serve
+        serve()
+    else:
+        main()
