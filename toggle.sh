@@ -19,7 +19,7 @@
 #   ~/.claude/notify-enabled.{project}   project-scoped
 #   ~/.claude/notify-enabled             global (all projects)
 #
-# notify.py checks: project sentinel OR global sentinel → send.
+# notify package checks: project sentinel OR global sentinel -> send.
 
 set -euo pipefail
 
@@ -122,18 +122,35 @@ _status() {
         echo "🔕 Notifications are OFF"
     fi
 
-    # Check serve daemon
+    # Check serve daemon (PID file, then OS-specific service manager)
     local pid_file="$HOME/.claude/notify-state/serve.pid"
+    local daemon_found=false
     if [[ -f "$pid_file" ]]; then
         local pid
         pid=$(cat "$pid_file" 2>/dev/null)
         if kill -0 "$pid" 2>/dev/null; then
             echo "🟢 Serve daemon: running (PID $pid)"
+            daemon_found=true
         else
             echo "🔴 Serve daemon: stale PID file (not running)"
         fi
-    else
-        echo "⚪ Serve daemon: not running"
+    fi
+    if [[ "$daemon_found" == "false" ]]; then
+        if [[ "$(uname -s)" == "Linux" ]] && command -v systemctl &>/dev/null; then
+            if systemctl --user is-active claude-notify-serve.service &>/dev/null; then
+                echo "🟢 Serve daemon: running (systemd)"
+            else
+                echo "⚪ Serve daemon: not running"
+            fi
+        elif [[ "$(uname -s)" == "Darwin" ]]; then
+            if launchctl list com.claude.notify-serve &>/dev/null 2>&1; then
+                echo "🟢 Serve daemon: running (launchd)"
+            else
+                echo "⚪ Serve daemon: not running"
+            fi
+        else
+            echo "⚪ Serve daemon: not running"
+        fi
     fi
 }
 
@@ -165,8 +182,12 @@ case "$ACTION" in
             _on "$PROJECT"
         fi
         ;;
+    doctor|health)
+        HOOKS_DIR="$HOME/.claude/hooks"
+        python3 "$HOOKS_DIR/notify" --health
+        ;;
     *)
-        echo "Usage: toggle.sh [on|off|reset|status|toggle] [project|all]"
+        echo "Usage: toggle.sh [on|off|reset|status|doctor|toggle] [project|all]"
         exit 1
         ;;
 esac

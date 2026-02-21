@@ -8,7 +8,7 @@
 #   ./setup.sh --uninstall         # Remove all installed components
 #
 # What it does:
-#   1. Copies notify.py to ~/.claude/hooks/
+#   1. Copies notify/ package to ~/.claude/hooks/
 #   2. Merges hook config into ~/.claude/settings.json
 #   3. Adds TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID to shell profile
 #   4. Sends a test notification
@@ -44,13 +44,20 @@ if [[ "$UNINSTALL" == "true" ]]; then
     echo "──────────────────────────────────────────────"
     echo ""
 
-    # Remove hook scripts
-    for f in "$HOME/.claude/hooks/notify.py" "$HOME/.claude/hooks/toggle.sh"; do
-        if [[ -f "$f" ]]; then
-            rm -f "$f"
-            echo "  Removed $f"
-        fi
-    done
+    # Remove hook scripts and package
+    if [[ -d "$HOME/.claude/hooks/notify" ]]; then
+        rm -rf "$HOME/.claude/hooks/notify"
+        echo "  Removed $HOME/.claude/hooks/notify/"
+    fi
+    # Legacy monolith cleanup
+    if [[ -f "$HOME/.claude/hooks/notify.py" ]]; then
+        rm -f "$HOME/.claude/hooks/notify.py"
+        echo "  Removed $HOME/.claude/hooks/notify.py"
+    fi
+    if [[ -f "$HOME/.claude/hooks/toggle.sh" ]]; then
+        rm -f "$HOME/.claude/hooks/toggle.sh"
+        echo "  Removed $HOME/.claude/hooks/toggle.sh"
+    fi
 
     # Remove slash command
     if [[ -f "$HOME/.claude/commands/notify.md" ]]; then
@@ -75,7 +82,7 @@ for event in list(hooks.keys()):
     filtered = []
     for matcher in matchers:
         hook_list = matcher.get("hooks", [])
-        hook_list = [h for h in hook_list if "notify.py" not in h.get("command", "")]
+        hook_list = [h for h in hook_list if "hooks/notify" not in h.get("command", "")]
         if hook_list:
             matcher["hooks"] = hook_list
             filtered.append(matcher)
@@ -112,12 +119,20 @@ PYEOF
         echo "  Cleaned env vars and aliases from $PROFILE"
     fi
 
-    # Unload and remove launchd plist
+    # Remove daemon (OS-specific)
     PLIST="$HOME/Library/LaunchAgents/com.claude.notify-serve.plist"
     if [[ -f "$PLIST" ]]; then
         launchctl unload "$PLIST" 2>/dev/null || true
         rm -f "$PLIST"
         echo "  Removed launchd agent (com.claude.notify-serve)"
+    fi
+    SERVICE="$HOME/.config/systemd/user/claude-notify-serve.service"
+    if [[ -f "$SERVICE" ]]; then
+        systemctl --user stop claude-notify-serve.service 2>/dev/null || true
+        systemctl --user disable claude-notify-serve.service 2>/dev/null || true
+        rm -f "$SERVICE"
+        systemctl --user daemon-reload 2>/dev/null || true
+        echo "  Removed systemd service (claude-notify-serve)"
     fi
 
     # Remove config file
@@ -220,10 +235,15 @@ fi
 # ── Install notify.py ────────────────────────────────────────────────────────
 
 echo ""
-echo "→ Installing notify.py to $HOOKS_DIR/"
+echo "→ Installing notify package to $HOOKS_DIR/"
 mkdir -p "$HOOKS_DIR"
-cp "$SCRIPT_DIR/notify.py" "$HOOKS_DIR/notify.py"
-chmod +x "$HOOKS_DIR/notify.py"
+# Remove legacy monolith if present
+rm -f "$HOOKS_DIR/notify.py"
+# Copy package directory
+rm -rf "$HOOKS_DIR/notify"
+cp -r "$SCRIPT_DIR/notify" "$HOOKS_DIR/notify"
+VERSION=$(python3 "$HOOKS_DIR/notify" --version 2>/dev/null || echo "unknown")
+echo "  Installed $VERSION"
 
 # ── Install toggle.sh ────────────────────────────────────────────────────────
 
@@ -309,7 +329,7 @@ for event, matchers in new_hooks["hooks"].items():
             for m in existing_hooks[event]
             for h in m.get("hooks", [])
         }
-        if "python3 ~/.claude/hooks/notify.py" not in existing_cmds:
+        if not any("hooks/notify" in cmd for cmd in existing_cmds):
             existing_hooks[event].extend(matchers)
 
 settings["hooks"] = existing_hooks
@@ -371,7 +391,7 @@ SENTINEL="$HOME/.claude/notify-enabled"
 date -u '+%Y-%m-%dT%H:%M:%SZ' > "$SENTINEL"
 
 TEST_RESULT=$(echo '{"hook_event_name": "Stop", "cwd": "/test/claude-telegram-hooks", "stop_hook_active": false}' | \
-    TELEGRAM_BOT_TOKEN="$TOKEN" TELEGRAM_CHAT_ID="$CHAT" python3 "$HOOKS_DIR/notify.py" 2>&1)
+    TELEGRAM_BOT_TOKEN="$TOKEN" TELEGRAM_CHAT_ID="$CHAT" python3 "$HOOKS_DIR/notify" 2>&1)
 
 # Remove sentinel — notifications start OFF by default
 rm -f "$SENTINEL"
@@ -384,27 +404,53 @@ else
     exit 1
 fi
 
-# ── Install serve daemon (launchd) ───────────────────────────────────────
+# ── Install serve daemon (OS-specific) ───────────────────────────────────
 
-PLIST_SRC="$SCRIPT_DIR/com.claude.notify-serve.plist"
-PLIST_DST="$HOME/Library/LaunchAgents/com.claude.notify-serve.plist"
-
+OS="$(uname -s)"
 echo ""
-echo "→ Installing serve daemon (launchd)"
-mkdir -p "$HOME/Library/LaunchAgents"
 
-# Generate plist with actual values substituted
-sed -e "s|__HOOKS_DIR__|$HOOKS_DIR|g" \
-    -e "s|__BOT_TOKEN__|$TOKEN|g" \
-    -e "s|__CHAT_ID__|$CHAT|g" \
-    -e "s|__HOME__|$HOME|g" \
-    "$PLIST_SRC" > "$PLIST_DST"
+if [[ "$OS" == "Darwin" ]]; then
+    PLIST_SRC="$SCRIPT_DIR/com.claude.notify-serve.plist"
+    PLIST_DST="$HOME/Library/LaunchAgents/com.claude.notify-serve.plist"
 
-# Unload old version if running, then load new
-launchctl unload "$PLIST_DST" 2>/dev/null || true
-launchctl load "$PLIST_DST"
-echo "  Installed and started com.claude.notify-serve"
-echo "  Logs: ~/.claude/notify-state/serve.{stdout,stderr}.log"
+    echo "→ Installing serve daemon (launchd)"
+    mkdir -p "$HOME/Library/LaunchAgents"
+
+    sed -e "s|__HOOKS_DIR__|$HOOKS_DIR|g" \
+        -e "s|__BOT_TOKEN__|$TOKEN|g" \
+        -e "s|__CHAT_ID__|$CHAT|g" \
+        -e "s|__HOME__|$HOME|g" \
+        "$PLIST_SRC" > "$PLIST_DST"
+
+    launchctl unload "$PLIST_DST" 2>/dev/null || true
+    launchctl load "$PLIST_DST"
+    echo "  Installed and started com.claude.notify-serve"
+    echo "  Logs: ~/.claude/notify-state/serve.{stdout,stderr}.log"
+
+elif [[ "$OS" == "Linux" ]]; then
+    SYSTEMD_DIR="$HOME/.config/systemd/user"
+    SERVICE_SRC="$SCRIPT_DIR/claude-notify-serve.service"
+    SERVICE_DST="$SYSTEMD_DIR/claude-notify-serve.service"
+
+    echo "→ Installing serve daemon (systemd user service)"
+    mkdir -p "$SYSTEMD_DIR"
+
+    sed -e "s|__HOOKS_DIR__|$HOOKS_DIR|g" \
+        -e "s|__BOT_TOKEN__|$TOKEN|g" \
+        -e "s|__CHAT_ID__|$CHAT|g" \
+        "$SERVICE_SRC" > "$SERVICE_DST"
+
+    systemctl --user daemon-reload
+    systemctl --user enable claude-notify-serve.service
+    systemctl --user restart claude-notify-serve.service
+    echo "  Installed and started claude-notify-serve.service"
+    echo "  Check: systemctl --user status claude-notify-serve"
+    echo "  Logs:  journalctl --user -u claude-notify-serve -f"
+
+else
+    echo "→ Skipping daemon install (unsupported OS: $OS)"
+    echo "  Run manually: python3 ~/.claude/hooks/notify --serve"
+fi
 
 echo ""
 echo "──────────────────────────────────────────────"

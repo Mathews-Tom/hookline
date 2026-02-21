@@ -8,7 +8,7 @@
     <key>ProgramArguments</key>
     <array>
         <string>/usr/bin/python3</string>
-        <string>__HOOKS_DIR__/notify.py</string>
+        <string>__HOOKS_DIR__/notify</string>
         <string>--serve</string>
     </array>
 

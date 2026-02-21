@@ -1,0 +1,15 @@
+[Unit]
+Description=Claude Code Telegram Notification Daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 __HOOKS_DIR__/notify --serve
+Environment=TELEGRAM_BOT_TOKEN=__BOT_TOKEN__
+Environment=TELEGRAM_CHAT_ID=__CHAT_ID__
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target
