@@ -242,7 +242,7 @@ rm -f "$HOOKS_DIR/notify.py"
 # Copy package directory
 rm -rf "$HOOKS_DIR/notify"
 cp -r "$SCRIPT_DIR/notify" "$HOOKS_DIR/notify"
-VERSION=$(python3 "$HOOKS_DIR/notify" --version 2>/dev/null || echo "unknown")
+VERSION=$(PYTHONPATH="$HOOKS_DIR" python3 -m notify --version 2>/dev/null || echo "unknown")
 echo "  Installed $VERSION"
 
 # ── Install toggle.sh ────────────────────────────────────────────────────────
@@ -318,18 +318,31 @@ with open(hooks_path) as f:
     new_hooks = json.load(f)
 
 # Merge hooks — append to existing hook events, don't overwrite
+# Also migrate legacy notify.py commands to the notify package path
 existing_hooks = settings.get("hooks", {})
+migrated = 0
+
+# First pass: migrate any legacy "hooks/notify.py" → "hooks/notify" in existing hooks
+for event in list(existing_hooks.keys()):
+    for matcher in existing_hooks[event]:
+        for hook in matcher.get("hooks", []):
+            cmd = hook.get("command", "")
+            if "hooks/notify.py" in cmd or (cmd.endswith("hooks/notify") and "PYTHONPATH" not in cmd):
+                hook["command"] = "PYTHONPATH=~/.claude/hooks python3 -m notify"
+                migrated += 1
+
+# Second pass: add new hook events that don't already exist
 for event, matchers in new_hooks["hooks"].items():
     if event not in existing_hooks:
         existing_hooks[event] = matchers
     else:
-        # Check if we already have the notify.py hook for this event
         existing_cmds = {
             h.get("command", "")
             for m in existing_hooks[event]
             for h in m.get("hooks", [])
         }
-        if not any("hooks/notify" in cmd for cmd in existing_cmds):
+        # Check for notify hook (either old or new command format)
+        if not any("notify" in cmd and ("hooks/notify" in cmd or "-m notify" in cmd) for cmd in existing_cmds):
             existing_hooks[event].extend(matchers)
 
 settings["hooks"] = existing_hooks
@@ -337,6 +350,8 @@ settings["hooks"] = existing_hooks
 with open(settings_path, "w") as f:
     json.dump(settings, f, indent=2)
 
+if migrated:
+    print(f"  Migrated {migrated} legacy notify.py hooks → notify package")
 print(f"  Updated {len(new_hooks['hooks'])} hook events")
 PYEOF
 
@@ -391,7 +406,7 @@ SENTINEL="$HOME/.claude/notify-enabled"
 date -u '+%Y-%m-%dT%H:%M:%SZ' > "$SENTINEL"
 
 TEST_RESULT=$(echo '{"hook_event_name": "Stop", "cwd": "/test/claude-telegram-hooks", "stop_hook_active": false}' | \
-    TELEGRAM_BOT_TOKEN="$TOKEN" TELEGRAM_CHAT_ID="$CHAT" python3 "$HOOKS_DIR/notify" 2>&1)
+    TELEGRAM_BOT_TOKEN="$TOKEN" TELEGRAM_CHAT_ID="$CHAT" PYTHONPATH="$HOOKS_DIR" python3 -m notify 2>&1) || true
 
 # Remove sentinel — notifications start OFF by default
 rm -f "$SENTINEL"
@@ -423,8 +438,11 @@ if [[ "$OS" == "Darwin" ]]; then
         "$PLIST_SRC" > "$PLIST_DST"
 
     launchctl unload "$PLIST_DST" 2>/dev/null || true
-    launchctl load "$PLIST_DST"
-    echo "  Installed and started com.claude.notify-serve"
+    if launchctl load "$PLIST_DST" 2>/dev/null; then
+        echo "  Installed and started com.claude.notify-serve"
+    else
+        echo "  ⚠ launchctl load failed — start manually: launchctl load $PLIST_DST"
+    fi
     echo "  Logs: ~/.claude/notify-state/serve.{stdout,stderr}.log"
 
 elif [[ "$OS" == "Linux" ]]; then
@@ -449,7 +467,7 @@ elif [[ "$OS" == "Linux" ]]; then
 
 else
     echo "→ Skipping daemon install (unsupported OS: $OS)"
-    echo "  Run manually: python3 ~/.claude/hooks/notify --serve"
+    echo "  Run manually: PYTHONPATH=~/.claude/hooks python3 -m notify --serve"
 fi
 
 echo ""
