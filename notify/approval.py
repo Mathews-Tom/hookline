@@ -167,7 +167,7 @@ def _handle_pre_tool_use(event: dict) -> None:
             msg = (
                 f"<b>⚠️ Approval needed but daemon offline</b>\n"
                 f"Tool: <b>{_esc(tool_name)}</b> · {_esc(label)}\n"
-                f"<i>Auto-blocked. Start daemon: python3 ~/.claude/hooks/notify.py --serve</i>"
+                f"<i>Auto-blocked. Start daemon: PYTHONPATH=~/.claude/hooks python3 -m notify --serve</i>"
             )
             _send_threaded(msg, project)
 

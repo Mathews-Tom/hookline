@@ -5,7 +5,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 __HOOKS_DIR__/notify --serve
+ExecStart=/usr/bin/python3 -m notify --serve
+Environment=PYTHONPATH=__HOOKS_DIR__
 Environment=TELEGRAM_BOT_TOKEN=__BOT_TOKEN__
 Environment=TELEGRAM_CHAT_ID=__CHAT_ID__
 Restart=on-failure

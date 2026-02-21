@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ~/.claude/hooks/notify"
+            "command": "PYTHONPATH=~/.claude/hooks python3 -m notify"
           }
         ]
       }
@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ~/.claude/hooks/notify"
+            "command": "PYTHONPATH=~/.claude/hooks python3 -m notify"
           }
         ]
       }
@@ -25,7 +25,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ~/.claude/hooks/notify"
+            "command": "PYTHONPATH=~/.claude/hooks python3 -m notify"
           }
         ]
       }
@@ -35,7 +35,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ~/.claude/hooks/notify"
+            "command": "PYTHONPATH=~/.claude/hooks python3 -m notify"
           }
         ]
       }
@@ -45,7 +45,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ~/.claude/hooks/notify"
+            "command": "PYTHONPATH=~/.claude/hooks python3 -m notify"
           }
         ]
       }
@@ -55,7 +55,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ~/.claude/hooks/notify"
+            "command": "PYTHONPATH=~/.claude/hooks python3 -m notify"
           }
         ]
       }
