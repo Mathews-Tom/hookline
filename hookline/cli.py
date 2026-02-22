@@ -93,6 +93,23 @@ def _do_status() -> None:
     daemon = _is_serve_running()
     print(f"daemon:    {'running' if daemon else 'stopped'}")
 
+    from hookline.config import RELAY_ENABLED
+    if RELAY_ENABLED:
+        from hookline.relay import list_active_sessions
+        sessions = list_active_sessions()
+        print(f"relay:     ON ({len(sessions)} active session(s))")
+        for s in sessions:
+            status_parts: list[str] = []
+            if s.get("paused"):
+                status_parts.append("paused")
+            unread = s.get("unread_inbox", 0)
+            if unread:
+                status_parts.append(f"{unread} unread")
+            extra = f" ({', '.join(status_parts)})" if status_parts else ""
+            print(f"  {s['project']}{extra}")
+    else:
+        print("relay:     OFF")
+
 
 def _do_serve() -> None:
     """Start the Telegram polling server."""
@@ -173,6 +190,10 @@ def _do_config() -> None:
     print(f"approval_enabled:  {APPROVAL_ENABLED}")
     print(f"approval_user:     {approval_display(APPROVAL_USER)}")
     print(f"approval_timeout:  {APPROVAL_TIMEOUT}s")
+
+    from hookline.config import RELAY_ENABLED, RELAY_MODE
+    print(f"relay_enabled:     {RELAY_ENABLED}")
+    print(f"relay_mode:        {RELAY_MODE}")
 
 
 def approval_display(val: str) -> str:
