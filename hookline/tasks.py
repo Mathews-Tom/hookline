@@ -1,8 +1,8 @@
 """Task tracking: completed tasks per session for progress display."""
 from __future__ import annotations
 
-from notify.session import _session_key
-from notify.state import _clear_state, _read_state, _write_state
+from hookline.session import _session_key
+from hookline.state import _clear_state, _read_state, _write_state
 
 
 def _track_task(project: str, event: dict) -> tuple[int, int | None]:

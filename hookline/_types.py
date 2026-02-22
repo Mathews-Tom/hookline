@@ -1,4 +1,4 @@
-"""Type definitions for claude-notify state structures."""
+"""Type definitions for hookline state structures."""
 from __future__ import annotations
 
 from typing import Any, TypedDict

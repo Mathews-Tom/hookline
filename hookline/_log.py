@@ -1,4 +1,4 @@
-"""Logging utility for claude-notify."""
+"""Logging utility for hookline."""
 from __future__ import annotations
 
 import logging
@@ -14,7 +14,7 @@ def setup_serve_logging(state_dir: Path) -> None:
     global _serve_logger
     log_path = state_dir / "serve.log"
     state_dir.mkdir(parents=True, exist_ok=True)
-    _serve_logger = logging.getLogger("claude-notify-serve")
+    _serve_logger = logging.getLogger("hookline-serve")
     _serve_logger.setLevel(logging.INFO)
     handler = logging.handlers.RotatingFileHandler(
         log_path, maxBytes=5 * 1024 * 1024, backupCount=3,
@@ -27,4 +27,4 @@ def log(msg: str) -> None:
     """Log to stderr (hook mode) or rotating file (serve mode)."""
     if _serve_logger:
         _serve_logger.info(msg)
-    print(f"[claude-notify] {msg}", file=sys.stderr)
+    print(f"[hookline] {msg}", file=sys.stderr)

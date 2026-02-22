@@ -7,8 +7,8 @@ import os
 from collections.abc import Callable
 from pathlib import Path
 
-from notify._log import log
-from notify.config import SERVE_PID_FILE, STATE_DIR
+from hookline._log import log
+from hookline.config import SERVE_PID_FILE, STATE_DIR
 
 
 def _state_dir(project: str) -> Path:

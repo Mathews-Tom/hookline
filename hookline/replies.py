@@ -4,12 +4,12 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from notify.config import CHAT_ID, REPLY_COMMANDS
-from notify.formatting import _esc, _truncate
-from notify.project import _project_label
-from notify.telegram import _send_document, _telegram_api
-from notify.threads import _find_thread_by_message_id
-from notify.transcript import _extract_transcript_summary, _read_transcript_tail
+from hookline.config import CHAT_ID, REPLY_COMMANDS
+from hookline.formatting import _esc, _truncate
+from hookline.project import _project_label
+from hookline.telegram import _send_document, _telegram_api
+from hookline.threads import _find_thread_by_message_id
+from hookline.transcript import _extract_transcript_summary, _read_transcript_tail
 
 
 def _handle_reply_message(message: dict) -> None:

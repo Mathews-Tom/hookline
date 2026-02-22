@@ -10,8 +10,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from notify._log import log
-from notify.config import (
+from hookline._log import log
+from hookline.config import (
     APPROVAL_ENABLED,
     APPROVAL_TIMEOUT,
     APPROVAL_USER,
@@ -20,12 +20,12 @@ from notify.config import (
     DRY_RUN,
     STATE_DIR,
 )
-from notify.formatting import _esc, _truncate
-from notify.project import _project_label
-from notify.session import _extract_project, _is_enabled, _session_duration
-from notify.state import _clear_state, _is_serve_running, _read_state, _write_state
-from notify.telegram import _answer_callback, _telegram_api, send_message
-from notify.threads import _get_thread_id
+from hookline.formatting import _esc, _truncate
+from hookline.project import _project_label
+from hookline.session import _extract_project, _is_enabled, _session_duration
+from hookline.state import _clear_state, _is_serve_running, _read_state, _write_state
+from hookline.telegram import _answer_callback, _telegram_api, send_message
+from hookline.threads import _get_thread_id
 
 
 def _approval_pipe_path(approval_id: str) -> Path:
@@ -135,7 +135,7 @@ def _send_threaded(
     reply_to = _get_thread_id(project)
     message_id = send_message(text, project=project, reply_to=reply_to, is_final=is_final)
 
-    from notify.threads import _set_thread_id  # avoid circular at module level
+    from hookline.threads import _set_thread_id  # avoid circular at module level
     if message_id and reply_to is None:
         _set_thread_id(project, message_id, transcript_path=transcript_path)
 
@@ -167,7 +167,7 @@ def _handle_pre_tool_use(event: dict) -> None:
             msg = (
                 f"<b>⚠️ Approval needed but daemon offline</b>\n"
                 f"Tool: <b>{_esc(tool_name)}</b> · {_esc(label)}\n"
-                f"<i>Auto-blocked. Start daemon: PYTHONPATH=~/.claude/hooks python3 -m notify --serve</i>"
+                f"<i>Auto-blocked. Start daemon: hookline serve</i>"
             )
             _send_threaded(msg, project)
 

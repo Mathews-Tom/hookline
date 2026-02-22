@@ -11,31 +11,41 @@ from typing import Any
 
 CLAUDE_DIR = Path.home() / ".claude"
 SENTINEL_DIR = CLAUDE_DIR
-STATE_DIR = CLAUDE_DIR / "notify-state"
-NOTIFY_CONFIG_PATH = CLAUDE_DIR / "notify-config.json"
-PROJECT_CONFIG_PATH = CLAUDE_DIR / "notify-projects.json"
+STATE_DIR = CLAUDE_DIR / "hookline-state"
+NOTIFY_CONFIG_PATH = CLAUDE_DIR / "hookline.json"
+PROJECT_CONFIG_PATH = CLAUDE_DIR / "hookline-projects.json"
 SERVE_PID_FILE = STATE_DIR / "serve.pid"
 AUDIT_LOG = STATE_DIR / "audit.jsonl"
 
 # ── Credentials ──────────────────────────────────────────────────────────────
 
-BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+BOT_TOKEN = os.environ.get("HOOKLINE_BOT_TOKEN") or os.environ.get("TELEGRAM_BOT_TOKEN", "")
+CHAT_ID = os.environ.get("HOOKLINE_CHAT_ID") or os.environ.get("TELEGRAM_CHAT_ID", "")
+
+
+def validate_credentials() -> list[str]:
+    """Validate BOT_TOKEN and CHAT_ID formats. Returns list of error strings."""
+    errors: list[str] = []
+    if BOT_TOKEN and ":" not in BOT_TOKEN:
+        errors.append("BOT_TOKEN: expected format digits:alphanumeric (e.g. 123456:ABCdef...)")
+    if CHAT_ID and not CHAT_ID.lstrip("-").isdigit():
+        errors.append("CHAT_ID: expected numeric value")
+    return errors
 
 # ── Config File Loader ───────────────────────────────────────────────────────
 
-_notify_config: dict | None = None
+_hookline_config: dict | None = None
 
 
 def _load_config() -> dict[str, Any]:
-    """Load ~/.claude/notify-config.json (cached per invocation)."""
-    global _notify_config
-    if _notify_config is None:
+    """Load ~/.claude/hookline.json (cached per invocation)."""
+    global _hookline_config
+    if _hookline_config is None:
         try:
-            _notify_config = json.loads(NOTIFY_CONFIG_PATH.read_text())
+            _hookline_config = json.loads(NOTIFY_CONFIG_PATH.read_text())
         except (OSError, json.JSONDecodeError):
-            _notify_config = {}
-    return _notify_config  # type: ignore[return-value]
+            _hookline_config = {}
+    return _hookline_config  # type: ignore[return-value]
 
 
 def _cfg_bool(env_key: str, config_key: str, default: bool) -> bool:
@@ -84,15 +94,15 @@ def _cfg_suppress(env_key: str, config_key: str) -> set[str]:
 
 # ── Preferences ──────────────────────────────────────────────────────────────
 
-SUPPRESS = _cfg_suppress("CLAUDE_NOTIFY_SUPPRESS", "suppress")
-MIN_SESSION_AGE = _cfg_int("CLAUDE_NOTIFY_MIN_AGE", "min_session_age", 0)
-SHOW_BUTTONS = _cfg_bool("CLAUDE_NOTIFY_BUTTONS", "show_buttons", True)
-DEBOUNCE_WINDOW = _cfg_int("CLAUDE_NOTIFY_DEBOUNCE", "debounce_window", 30)
+SUPPRESS = _cfg_suppress("HOOKLINE_SUPPRESS", "suppress")
+MIN_SESSION_AGE = _cfg_int("HOOKLINE_MIN_AGE", "min_session_age", 0)
+SHOW_BUTTONS = _cfg_bool("HOOKLINE_BUTTONS", "show_buttons", True)
+DEBOUNCE_WINDOW = _cfg_int("HOOKLINE_DEBOUNCE", "debounce_window", 30)
 
 # Tool approval settings
-APPROVAL_ENABLED = _cfg_bool("CLAUDE_NOTIFY_APPROVAL", "approval_enabled", False)
-APPROVAL_USER = _cfg_str("CLAUDE_NOTIFY_APPROVAL_USER", "approval_user", "") or CHAT_ID
-APPROVAL_TIMEOUT = _cfg_int("CLAUDE_NOTIFY_APPROVAL_TIMEOUT", "approval_timeout", 120)
+APPROVAL_ENABLED = _cfg_bool("HOOKLINE_APPROVAL", "approval_enabled", False)
+APPROVAL_USER = _cfg_str("HOOKLINE_APPROVAL_USER", "approval_user", "") or CHAT_ID
+APPROVAL_TIMEOUT = _cfg_int("HOOKLINE_APPROVAL_TIMEOUT", "approval_timeout", 120)
 
 # ── CLI Mode ─────────────────────────────────────────────────────────────────
 

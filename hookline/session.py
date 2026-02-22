@@ -5,17 +5,17 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from notify.config import SENTINEL_DIR
-from notify.state import _clear_state, _read_state
+from hookline.config import SENTINEL_DIR
+from hookline.state import _clear_state, _read_state
 
 
 def _sentinel_path(project: str) -> Path | None:
     """Find the active sentinel file (project-scoped or global)."""
     if project:
-        p = SENTINEL_DIR / f"notify-enabled.{project}"
+        p = SENTINEL_DIR / f"hookline-enabled.{project}"
         if p.exists():
             return p
-    g = SENTINEL_DIR / "notify-enabled"
+    g = SENTINEL_DIR / "hookline-enabled"
     return g if g.exists() else None
 
 

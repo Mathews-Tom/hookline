@@ -5,11 +5,11 @@ import re
 from datetime import datetime, timezone
 from typing import Any
 
-from notify.config import EMOJI
-from notify.project import _project_label
-from notify.session import _session_duration
-from notify.tasks import _track_task
-from notify.transcript import _extract_transcript_summary
+from hookline.config import EMOJI
+from hookline.project import _project_label
+from hookline.session import _session_duration
+from hookline.tasks import _track_task
+from hookline.transcript import _extract_transcript_summary
 
 
 def _esc(text: str) -> str:

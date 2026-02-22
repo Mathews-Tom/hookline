@@ -4,10 +4,10 @@ from __future__ import annotations
 import time
 from datetime import datetime, timezone
 
-from notify.config import DEBOUNCE_WINDOW, EMOJI
-from notify.formatting import _esc
-from notify.project import _project_label
-from notify.state import _locked_update, _read_state
+from hookline.config import DEBOUNCE_WINDOW, EMOJI
+from hookline.formatting import _esc
+from hookline.project import _project_label
+from hookline.state import _locked_update, _read_state
 
 
 def _debounce_accumulate(project: str, event: dict) -> None:
