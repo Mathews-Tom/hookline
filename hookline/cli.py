@@ -266,6 +266,49 @@ def _do_doctor() -> None:
     health_check()
 
 
+def _do_remove(project: str | None) -> None:
+    """Remove a project completely: state, sentinel, and project config entry."""
+    import json
+    import shutil
+
+    from hookline.config import PROJECT_CONFIG_PATH, STATE_DIR
+
+    if not project or project == "all":
+        print("❌ hookline remove: specify a project name", file=sys.stderr)
+        print("   usage: hookline remove <project>", file=sys.stderr)
+        sys.exit(1)
+
+    removed: list[str] = []
+
+    # 1. Remove sentinel file
+    sentinel = _sentinel_project(project)
+    if sentinel.exists():
+        sentinel.unlink()
+        removed.append("sentinel")
+
+    # 2. Remove state directory
+    state_dir = STATE_DIR / project
+    if state_dir.exists() and state_dir.is_dir():
+        shutil.rmtree(state_dir)
+        removed.append("state")
+
+    # 3. Remove entry from hookline-projects.json
+    if PROJECT_CONFIG_PATH.exists():
+        try:
+            config = json.loads(PROJECT_CONFIG_PATH.read_text())
+            if project in config:
+                del config[project]
+                PROJECT_CONFIG_PATH.write_text(json.dumps(config, indent=2) + "\n")
+                removed.append("project config")
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    if removed:
+        print(f"🗑️  removed '{project}' — cleaned: {', '.join(removed)}")
+    else:
+        print(f"⚪ project '{project}' not found (no state, sentinel, or config entry)")
+
+
 def _do_migrate() -> None:
     """Run migration from notify to hookline."""
     from hookline.migrate import migrate
@@ -287,6 +330,7 @@ def _print_usage() -> None:
         "  🩺 health   run self-diagnostics\n"
         "  🩺 doctor   extended diagnostics\n"
         "  🧹 reset    clear thread/tasks/debounce state\n"
+        "  🗑️  remove   remove a project completely\n"
         "  ⚙️  config   print effective configuration\n"
         "  🔄 migrate  migrate from notify to hookline\n"
         "  🏷️  version  print version\n"
@@ -302,7 +346,7 @@ def _print_usage() -> None:
 # All recognised subcommands and their flag aliases
 _SUBCOMMANDS: frozenset[str] = frozenset({
     "on", "off", "status", "serve", "health", "doctor",
-    "reset", "config", "migrate", "version",
+    "reset", "remove", "config", "migrate", "version",
 })
 
 _FLAG_MAP: dict[str, str] = {
@@ -379,6 +423,8 @@ def cli_main() -> None:
         _do_doctor()
     elif cmd == "reset":
         _do_reset(effective_project)
+    elif cmd == "remove":
+        _do_remove(effective_project)
     elif cmd == "config":
         _do_config()
     elif cmd == "migrate":
