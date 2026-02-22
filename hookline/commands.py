@@ -4,7 +4,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from hookline._log import log
-from hookline.config import CHAT_ID, MEMORY_ENABLED, RELAY_ENABLED
+from hookline.config import CHAT_ID, MEMORY_ENABLED, RELAY_ENABLED, SCHEDULE_ENABLED
 from hookline.formatting import _esc, _truncate
 from hookline.project import _project_label
 from hookline.relay import (
@@ -300,3 +300,65 @@ def _cmd_forget(project: str, args: str, reply_to: int) -> None:
         _reply(f"Deactivated memory entry <code>{kid}</code>.", reply_to)
     else:
         _reply(f"Entry <code>{kid}</code> not found or already inactive.", reply_to)
+
+
+# ── Schedule Commands ────────────────────────────────────────────────────────
+
+
+def _schedule_disabled_reply(reply_to: int) -> None:
+    _reply(
+        "Scheduler is disabled. Set <code>schedule_enabled: true</code> in hookline.json",
+        reply_to,
+    )
+
+
+@register("schedule")
+def _cmd_schedule(project: str, args: str, reply_to: int) -> None:  # noqa: ARG001
+    """Show scheduled task status."""
+    if not SCHEDULE_ENABLED:
+        _schedule_disabled_reply(reply_to)
+        return
+    from hookline.scheduler import get_status
+    tasks = get_status()
+    if not tasks:
+        _reply("No scheduled tasks registered.", reply_to)
+        return
+    lines = ["<b>Scheduled Tasks</b>", ""]
+    for t in tasks:
+        name = t.get("name", "?")
+        task_type = t.get("type", "?")
+        last = t.get("last_run")
+        last_str = _format_ts(last) if last else "never"
+        lines.append(f"  <b>{_esc(str(name))}</b> ({task_type}) — last: {last_str}")
+    _reply("\n".join(lines), reply_to)
+
+
+@register("digest")
+def _cmd_digest(project: str, args: str, reply_to: int) -> None:  # noqa: ARG001
+    """Trigger a manual daily digest."""
+    if not SCHEDULE_ENABLED:
+        _schedule_disabled_reply(reply_to)
+        return
+    from hookline.proactive import send_digest
+    send_digest()
+    _reply("Digest sent.", reply_to)
+
+
+@register("briefing")
+def _cmd_briefing(project: str, args: str, reply_to: int) -> None:  # noqa: ARG001
+    """Trigger a manual morning briefing."""
+    if not SCHEDULE_ENABLED:
+        _schedule_disabled_reply(reply_to)
+        return
+    from hookline.proactive import send_briefing
+    send_briefing()
+    _reply("Briefing sent.", reply_to)
+
+
+def _format_ts(ts: float | None) -> str:
+    """Format a unix timestamp as a short datetime string."""
+    if not ts:
+        return "never"
+    from datetime import datetime, timezone
+    dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+    return dt.strftime("%Y-%m-%d %H:%M UTC")

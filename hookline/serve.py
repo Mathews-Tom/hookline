@@ -12,6 +12,7 @@ from hookline.config import (
     CHAT_ID,
     MEMORY_ENABLED,
     RELAY_ENABLED,
+    SCHEDULE_ENABLED,
     SENTINEL_DIR,
     STATE_DIR,
 )
@@ -34,6 +35,11 @@ def serve() -> None:
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     SERVE_PID_FILE.write_text(str(os.getpid()))
 
+    if SCHEDULE_ENABLED:
+        from hookline.proactive import setup_proactive
+        setup_proactive()
+        print("[hookline-serve] Scheduler enabled.")
+
     print("[hookline-serve] Daemon started. Polling for updates...")
     print("[hookline-serve] Handles: button callbacks, reply commands, relay")
     print("[hookline-serve] Press Ctrl+C to stop.\n")
@@ -47,6 +53,10 @@ def serve() -> None:
                     "timeout": 30,
                     "allowed_updates": ["callback_query", "message"],
                 }, timeout=35)
+
+                if SCHEDULE_ENABLED:
+                    from hookline.scheduler import tick
+                    tick()
 
                 if not result or not result.get("ok"):
                     time.sleep(5)
