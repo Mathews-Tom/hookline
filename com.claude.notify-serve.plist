@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.claude.notify-serve</string>
+    <string>com.claude.hookline-serve</string>
 
     <key>ProgramArguments</key>
     <array>
         <string>/usr/bin/python3</string>
         <string>-m</string>
-        <string>notify</string>
+        <string>hookline</string>
         <string>--serve</string>
     </array>
 
@@ -30,10 +30,10 @@
     <true/>
 
     <key>StandardOutPath</key>
-    <string>__HOME__/.claude/notify-state/serve.stdout.log</string>
+    <string>__HOME__/.claude/hookline-state/serve.stdout.log</string>
 
     <key>StandardErrorPath</key>
-    <string>__HOME__/.claude/notify-state/serve.stderr.log</string>
+    <string>__HOME__/.claude/hookline-state/serve.stderr.log</string>
 
     <key>ThrottleInterval</key>
     <integer>10</integer>
