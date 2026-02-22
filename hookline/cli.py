@@ -110,6 +110,17 @@ def _do_status() -> None:
     else:
         print("relay:     OFF")
 
+    from hookline.config import MEMORY_ENABLED
+    if MEMORY_ENABLED:
+        try:
+            from hookline.memory.store import get_store
+            get_store()  # Verify store is accessible
+            print("memory:    ON")
+        except Exception:
+            print("memory:    ON (store unavailable)")
+    else:
+        print("memory:    OFF")
+
 
 def _do_serve() -> None:
     """Start the Telegram polling server."""
@@ -194,6 +205,11 @@ def _do_config() -> None:
     from hookline.config import RELAY_ENABLED, RELAY_MODE
     print(f"relay_enabled:     {RELAY_ENABLED}")
     print(f"relay_mode:        {RELAY_MODE}")
+
+    from hookline.config import MEMORY_DB_PATH, MEMORY_ENABLED, MEMORY_MAX_ENTRIES
+    print(f"memory_enabled:    {MEMORY_ENABLED}")
+    print(f"memory_db_path:    {MEMORY_DB_PATH or '(default)'}")
+    print(f"memory_max_entries:{MEMORY_MAX_ENTRIES}")
 
 
 def approval_display(val: str) -> str:

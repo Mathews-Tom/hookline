@@ -12,6 +12,7 @@ from hookline.config import (
     DEBOUNCE_EVENTS,
     DRY_RUN,
     FULL_FORMAT_EVENTS,
+    MEMORY_ENABLED,
     MIN_SESSION_AGE,
     RELAY_ENABLED,
     STATE_DIR,
@@ -80,6 +81,7 @@ def main() -> None:
             from hookline.relay import clear_inbox, set_paused
             clear_inbox(project)
             set_paused(project, paused=False)
+        _log_event_to_memory(project, "stop", "Session ended")
         return
 
     batch_msg = _debounce_flush(project)
@@ -201,6 +203,18 @@ def health_check() -> None:
     print("=" * 45)
     print("  Status: ALL OK" if all_ok else "  Status: ISSUES DETECTED")
     sys.exit(0 if all_ok else 1)
+
+
+def _log_event_to_memory(project: str, event_type: str, text: str) -> None:
+    """Log a hook event to memory store if memory is enabled."""
+    if not MEMORY_ENABLED or not project:
+        return
+    try:
+        from hookline.memory.store import get_store
+        store = get_store()
+        store.log_message(project, "hookline", f"[{event_type}] {text}")
+    except Exception as e:
+        log(f"Memory event log error: {e}")
 
 
 if __name__ == "__main__":

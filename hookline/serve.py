@@ -7,7 +7,14 @@ import time
 
 from hookline._log import log, setup_serve_logging
 from hookline.approval import _handle_approval_callback
-from hookline.config import BOT_TOKEN, CHAT_ID, RELAY_ENABLED, SENTINEL_DIR, STATE_DIR
+from hookline.config import (
+    BOT_TOKEN,
+    CHAT_ID,
+    MEMORY_ENABLED,
+    RELAY_ENABLED,
+    SENTINEL_DIR,
+    STATE_DIR,
+)
 from hookline.state import _clear_state, _write_state
 from hookline.tasks import _clear_tasks
 from hookline.telegram import _answer_callback, _telegram_api
@@ -109,6 +116,9 @@ def _handle_threaded_message(message: dict, text: str, reply_msg_id: int) -> Non
     # Fall back to legacy reply handlers (log, full, errors, tools, help)
     _handle_reply_message(message)
 
+    # Log message to memory store
+    _log_to_memory(project, "telegram", text)
+
 
 def _handle_freestanding_message(message: dict, text: str) -> None:
     """Handle a free-standing message (not a reply) through relay commands."""
@@ -130,6 +140,13 @@ def _handle_freestanding_message(message: dict, text: str) -> None:
     # For project-scoped commands, try to infer project from recent sessions
     if dispatch(cmd, "", args, chat_msg_id):
         return
+
+    # Log free-standing message to memory if we can resolve a project
+    if MEMORY_ENABLED and RELAY_ENABLED:
+        from hookline.relay import list_active_sessions as _list_sessions
+        _sessions = _list_sessions()
+        if len(_sessions) == 1:
+            _log_to_memory(_sessions[0]["project"], "telegram", text)
 
     # Unrecognised free-standing text: queue to relay if exactly one active session
     if RELAY_ENABLED:
@@ -198,3 +215,16 @@ def _handle_button(callback: dict) -> None:
 
     else:
         _answer_callback(callback_id, "Unknown action")
+
+
+def _log_to_memory(project: str, sender: str, text: str) -> None:
+    """Log a message to memory store if memory is enabled."""
+    if not MEMORY_ENABLED or not project or not text:
+        return
+    try:
+        from hookline.memory.knowledge import KnowledgeManager
+        from hookline.memory.store import get_store
+        km = KnowledgeManager(get_store())
+        km.process_message(project, sender, text)
+    except Exception as e:
+        log(f"Memory log error: {e}")

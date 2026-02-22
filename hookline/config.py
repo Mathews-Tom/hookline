@@ -108,6 +108,11 @@ APPROVAL_TIMEOUT = _cfg_int("HOOKLINE_APPROVAL_TIMEOUT", "approval_timeout", 120
 RELAY_ENABLED = _cfg_bool("HOOKLINE_RELAY", "relay_enabled", False)
 RELAY_MODE = _cfg_str("HOOKLINE_RELAY_MODE", "relay_mode", "inbox")
 
+# Memory settings
+MEMORY_ENABLED = _cfg_bool("HOOKLINE_MEMORY", "memory_enabled", False)
+MEMORY_DB_PATH = _cfg_str("HOOKLINE_MEMORY_DB", "memory_db_path", "")
+MEMORY_MAX_ENTRIES = _cfg_int("HOOKLINE_MEMORY_MAX", "memory_max_entries", 10000)
+
 # ── CLI Mode ─────────────────────────────────────────────────────────────────
 
 DRY_RUN = "--dry-run" in sys.argv
@@ -137,5 +142,10 @@ REPLY_COMMANDS: dict[str, str] = {
     "sessions": "List active sessions with projects",
     "inbox": "Show unread inbox messages for a project",
     "clear": "Clear all inbox messages for a project",
+    "remember": "Store a fact or note in project memory",
+    "recall": "Search project memory by query",
+    "goals": "List active goals for a project",
+    "context": "Show memory context snapshot for a project",
+    "forget": "Deactivate a memory entry by ID",
     "help": "Show available commands",
 }

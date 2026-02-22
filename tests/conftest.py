@@ -45,6 +45,7 @@ def hookline(_add_project_root: None, monkeypatch: pytest.MonkeyPatch, tmp_path:
     state_dir = tmp_path / "hookline-state"
     state_dir.mkdir()
     pid_file = state_dir / "serve.pid"
+    memory_db = str(state_dir / "memory.db")
 
     # All submodules that need patching
     _main = _submod("__main__")
@@ -65,6 +66,9 @@ def hookline(_add_project_root: None, monkeypatch: pytest.MonkeyPatch, tmp_path:
         "DRY_RUN": False,
         "BOT_TOKEN": "test-token",
         "CHAT_ID": "12345",
+        "MEMORY_ENABLED": False,
+        "MEMORY_DB_PATH": memory_db,
+        "MEMORY_MAX_ENTRIES": 1000,
     }
     for attr, value in patches.items():
         for mod in all_mods:
@@ -75,6 +79,10 @@ def hookline(_add_project_root: None, monkeypatch: pytest.MonkeyPatch, tmp_path:
     monkeypatch.setattr(_config, "_hookline_config", None)
     monkeypatch.setattr(_project, "_project_config", None)
     monkeypatch.setattr(_transcript, "_transcript_cache", {})
+
+    # Reset memory store singleton
+    _memory_store = _submod("memory.store")
+    monkeypatch.setattr(_memory_store, "_store_instance", None)
 
     # Patch the re-exports on the package itself for direct access
     for attr, value in patches.items():
