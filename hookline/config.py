@@ -104,6 +104,10 @@ APPROVAL_ENABLED = _cfg_bool("HOOKLINE_APPROVAL", "approval_enabled", False)
 APPROVAL_USER = _cfg_str("HOOKLINE_APPROVAL_USER", "approval_user", "") or CHAT_ID
 APPROVAL_TIMEOUT = _cfg_int("HOOKLINE_APPROVAL_TIMEOUT", "approval_timeout", 120)
 
+# Relay settings
+RELAY_ENABLED = _cfg_bool("HOOKLINE_RELAY", "relay_enabled", False)
+RELAY_MODE = _cfg_str("HOOKLINE_RELAY_MODE", "relay_mode", "inbox")
+
 # ── CLI Mode ─────────────────────────────────────────────────────────────────
 
 DRY_RUN = "--dry-run" in sys.argv
@@ -127,5 +131,11 @@ REPLY_COMMANDS: dict[str, str] = {
     "full": "Upload transcript tail as .txt document",
     "errors": "Extract and send only error blocks",
     "tools": "List all tool calls made in the session",
+    "send": "Queue a message to the active session's inbox",
+    "pause": "Pause the active session (blocks next PreToolUse)",
+    "resume": "Resume a paused session",
+    "sessions": "List active sessions with projects",
+    "inbox": "Show unread inbox messages for a project",
+    "clear": "Clear all inbox messages for a project",
     "help": "Show available commands",
 }
