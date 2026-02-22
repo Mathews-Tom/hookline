@@ -414,9 +414,21 @@ if migrated:
 print(f"  Updated {len(new_hooks['hooks'])} hook events")
 PYEOF
 
-# ── Set environment variables ────────────────────────────────────────────────
+# ── Write credentials to .env ────────────────────────────────────────────────
 
-echo "→ Setting environment variables"
+echo "→ Writing credentials to $HOOKS_DIR/.env"
+
+cat > "$HOOKS_DIR/.env" << EOF
+# Hookline Telegram credentials (written by setup.sh)
+HOOKLINE_BOT_TOKEN=$TOKEN
+HOOKLINE_CHAT_ID=$CHAT
+EOF
+
+echo "  Saved to $HOOKS_DIR/.env"
+
+# ── Set shell aliases ────────────────────────────────────────────────────────
+
+echo "→ Setting shell aliases"
 
 # Detect shell profile
 PROFILE=""
@@ -429,31 +441,27 @@ elif [[ -f "$HOME/.bash_profile" ]]; then
 fi
 
 if [[ -n "$PROFILE" ]]; then
-    # Remove any existing entries (both hookline and legacy notify aliases)
-    grep -v "TELEGRAM_BOT_TOKEN\|TELEGRAM_CHAT_ID\|# Claude Code Telegram\|alias hookline-on\|alias hookline-off\|alias hookline-status\|alias notify-on\|alias notify-off\|alias notify-status" "$PROFILE" > "$PROFILE.tmp" || true
+    # Remove any existing entries (both hookline and legacy notify aliases/exports)
+    grep -v "TELEGRAM_BOT_TOKEN\|TELEGRAM_CHAT_ID\|HOOKLINE_BOT_TOKEN\|HOOKLINE_CHAT_ID\|# Claude Code Telegram\|# hookline (Claude Code\|alias hookline-on\|alias hookline-off\|alias hookline-status\|alias notify-on\|alias notify-off\|alias notify-status" "$PROFILE" > "$PROFILE.tmp" || true
     mv "$PROFILE.tmp" "$PROFILE"
 
-    # Append new entries
-    cat >> "$PROFILE" << EOF
+    # Append aliases only (no credentials in shell profile)
+    cat >> "$PROFILE" << 'EOF'
 
 # Claude Code Telegram notifications
-export TELEGRAM_BOT_TOKEN="$TOKEN"
-export TELEGRAM_CHAT_ID="$CHAT"
 alias hookline-on="python3 -m hookline on"
 alias hookline-off="python3 -m hookline off"
 alias hookline-status="python3 -m hookline status"
 EOF
 
-    echo "  Added to $PROFILE"
+    echo "  Added aliases to $PROFILE"
 else
-    echo "  Warning: Could not detect shell profile. Add manually:"
-    echo "    export TELEGRAM_BOT_TOKEN=\"$TOKEN\""
-    echo "    export TELEGRAM_CHAT_ID=\"$CHAT\""
+    echo "  Warning: Could not detect shell profile."
 fi
 
-# Export for current session
-export TELEGRAM_BOT_TOKEN="$TOKEN"
-export TELEGRAM_CHAT_ID="$CHAT"
+# Export for current session (test notification needs these)
+export HOOKLINE_BOT_TOKEN="$TOKEN"
+export HOOKLINE_CHAT_ID="$CHAT"
 
 # ── Test notification ────────────────────────────────────────────────────────
 
@@ -465,7 +473,7 @@ SENTINEL="$HOME/.claude/hookline-enabled"
 date -u '+%Y-%m-%dT%H:%M:%SZ' > "$SENTINEL"
 
 TEST_RESULT=$(echo '{"hook_event_name": "Stop", "cwd": "/test/claude-telegram-hooks", "stop_hook_active": false}' | \
-    TELEGRAM_BOT_TOKEN="$TOKEN" TELEGRAM_CHAT_ID="$CHAT" PYTHONPATH="$HOOKS_DIR" python3 -m hookline 2>&1) || true
+    HOOKLINE_BOT_TOKEN="$TOKEN" HOOKLINE_CHAT_ID="$CHAT" PYTHONPATH="$HOOKS_DIR" python3 -m hookline 2>&1) || true
 
 # Remove sentinel — notifications start OFF by default
 rm -f "$SENTINEL"
