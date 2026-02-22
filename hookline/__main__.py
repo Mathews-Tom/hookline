@@ -7,21 +7,22 @@ import sys
 from hookline import __version__
 from hookline._log import log
 from hookline.approval import _handle_pre_tool_use, _send_threaded
+from hookline.buttons import _clear_last_button_msg
 from hookline.config import (
     DEBOUNCE_EVENTS,
     DRY_RUN,
     FULL_FORMAT_EVENTS,
     MIN_SESSION_AGE,
+    RELAY_ENABLED,
     STATE_DIR,
     SUPPRESS,
 )
-from hookline.buttons import _clear_last_button_msg
 from hookline.debounce import _debounce_accumulate, _debounce_flush, _debounce_should_flush
 from hookline.formatting import format_compact, format_full
 from hookline.session import _extract_project, _is_enabled, _session_age_seconds
 from hookline.state import _clear_state, _is_serve_running
 from hookline.tasks import _clear_tasks
-from hookline.telegram import _telegram_api, send_message
+from hookline.telegram import _telegram_api
 from hookline.threads import _clear_thread
 
 
@@ -75,6 +76,10 @@ def main() -> None:
         _clear_thread(project)
         _clear_last_button_msg(project)
         _clear_state(project, "debounce.json")
+        if RELAY_ENABLED:
+            from hookline.relay import clear_inbox, set_paused
+            clear_inbox(project)
+            set_paused(project, paused=False)
         return
 
     batch_msg = _debounce_flush(project)
@@ -87,6 +92,34 @@ def main() -> None:
         msg = format_compact(event_name, event, project)
 
     _send_threaded(msg, project, transcript_path)
+
+    # Surface unread inbox messages as a digest appended to the notification
+    _surface_inbox(project, transcript_path)
+
+
+def _surface_inbox(project: str, transcript_path: str) -> None:
+    """Send unread inbox messages as a digest notification."""
+    if not RELAY_ENABLED or not project:
+        return
+    from hookline.formatting import _esc, _truncate
+    from hookline.relay import mark_read, read_inbox
+
+    messages = read_inbox(project, unread_only=True)
+    if not messages:
+        return
+
+    lines = [f"<b>📨 {len(messages)} message(s) from Telegram</b>", ""]
+    msg_ids: list[str] = []
+    for msg in messages[-5:]:
+        sender = msg.get("sender", "?")
+        text = _truncate(msg.get("text", ""), 200)
+        lines.append(f"  [{sender}] {_esc(text)}")
+        msg_ids.append(msg.get("id", ""))
+    if len(messages) > 5:
+        lines.append(f"  <i>… and {len(messages) - 5} more</i>")
+
+    _send_threaded("\n".join(lines), project, transcript_path)
+    mark_read(project, msg_ids if msg_ids else None)
 
 
 def health_check() -> None:
@@ -153,7 +186,8 @@ def health_check() -> None:
             daemon_info = f"PID {pid}"
         except OSError:
             daemon_info = "running"
-    checks.append(("Serve daemon", daemon_running, daemon_info if daemon_running else "not running"))
+    daemon_detail = daemon_info if daemon_running else "not running"
+    checks.append(("Serve daemon", daemon_running, daemon_detail))
 
     print(f"hookline v{__version__} health check")
     print("=" * 45)

@@ -1,7 +1,7 @@
 """hookline — Claude Code ↔ Telegram relay."""
 from __future__ import annotations
 
-__version__ = "4.0.0"
+__version__ = "4.1.0"
 
 # Re-export the primary entry points
 from hookline._log import log as _log  # noqa: F401
@@ -55,3 +55,13 @@ from hookline.tasks import _clear_tasks, _track_task  # noqa: F401
 from hookline.telegram import _answer_callback, _remove_buttons, _send_document, _telegram_api, send_message  # noqa: F401
 from hookline.threads import _clear_thread, _find_thread_by_message_id, _get_thread_id, _set_thread_id  # noqa: F401
 from hookline.transcript import _extract_transcript_summary, _read_transcript_tail, _transcript_cache  # noqa: F401
+from hookline.relay import (  # noqa: F401
+    clear_inbox,
+    is_paused,
+    list_active_sessions,
+    mark_read,
+    read_inbox,
+    set_paused,
+    write_inbox,
+)
+from hookline.commands import dispatch as dispatch_command, register as register_command  # noqa: F401

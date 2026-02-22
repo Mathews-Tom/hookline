@@ -51,3 +51,17 @@ class ApprovalState(TypedDict, total=False):
 class LastButtonState(TypedDict):
     session: str
     message_id: int
+
+
+class InboxMessage(TypedDict, total=False):
+    id: str
+    sender: str
+    text: str
+    ts: str
+    read: bool
+
+
+class RelayState(TypedDict, total=False):
+    paused: bool
+    paused_at: str
+    paused_by: str

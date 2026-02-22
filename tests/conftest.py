@@ -39,6 +39,8 @@ def hookline(_add_project_root: None, monkeypatch: pytest.MonkeyPatch, tmp_path:
     _approval = _submod("approval")
     _serve = _submod("serve")
     _debounce = _submod("debounce")
+    _relay = _submod("relay")
+    _commands = _submod("commands")
 
     state_dir = tmp_path / "hookline-state"
     state_dir.mkdir()
@@ -51,6 +53,7 @@ def hookline(_add_project_root: None, monkeypatch: pytest.MonkeyPatch, tmp_path:
     all_mods = [
         _config, _state, _session, _project, _transcript, _telegram,
         _approval, _serve, _debounce, _main, _threads, _replies,
+        _relay, _commands,
     ]
 
     # Patch each attribute only in modules that actually have it
@@ -96,15 +99,15 @@ def mock_telegram(hookline: Any, monkeypatch: pytest.MonkeyPatch) -> list[tuple[
             return {"ok": True}
         return {"ok": True, "result": {}}
 
-    # Patch in the actual submodule where it's called
-    _telegram = sys.modules["hookline.telegram"]
-    _approval = sys.modules["hookline.approval"]
-    _replies = sys.modules["hookline.replies"]
-    monkeypatch.setattr(_telegram, "_telegram_api", fake_api)
-    if hasattr(_approval, "_telegram_api"):
-        monkeypatch.setattr(_approval, "_telegram_api", fake_api)
-    if hasattr(_replies, "_telegram_api"):
-        monkeypatch.setattr(_replies, "_telegram_api", fake_api)
+    # Patch in every submodule that imports _telegram_api
+    api_modules = [
+        "hookline.telegram", "hookline.approval", "hookline.replies",
+        "hookline.commands", "hookline.serve",
+    ]
+    for mod_name in api_modules:
+        mod = sys.modules.get(mod_name)
+        if mod and hasattr(mod, "_telegram_api"):
+            monkeypatch.setattr(mod, "_telegram_api", fake_api)
 
     return calls
 
