@@ -121,6 +121,14 @@ def _do_status() -> None:
     else:
         print("memory:    OFF")
 
+    from hookline.config import SCHEDULE_ENABLED
+    if SCHEDULE_ENABLED:
+        from hookline.scheduler import get_status
+        tasks = get_status()
+        print(f"scheduler: ON ({len(tasks)} task(s))")
+    else:
+        print("scheduler: OFF")
+
 
 def _do_serve() -> None:
     """Start the Telegram polling server."""
@@ -210,6 +218,12 @@ def _do_config() -> None:
     print(f"memory_enabled:    {MEMORY_ENABLED}")
     print(f"memory_db_path:    {MEMORY_DB_PATH or '(default)'}")
     print(f"memory_max_entries:{MEMORY_MAX_ENTRIES}")
+
+    from hookline.config import BRIEFING_CRON, CHECKIN_INTERVAL, DIGEST_CRON, SCHEDULE_ENABLED
+    print(f"schedule_enabled:  {SCHEDULE_ENABLED}")
+    print(f"briefing_cron:     {BRIEFING_CRON}")
+    print(f"digest_cron:       {DIGEST_CRON}")
+    print(f"checkin_interval:  {CHECKIN_INTERVAL}m")
 
 
 def approval_display(val: str) -> str:
