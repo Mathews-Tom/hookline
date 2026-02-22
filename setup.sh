@@ -213,6 +213,17 @@ fi
 # ── Extract existing credentials (--update mode) ──────────────────────────
 
 if [[ "$UPDATE" == "true" && ( -z "$TOKEN" || -z "$CHAT" ) ]]; then
+    _extract_from_env() {
+        local envfile="$1"
+        [[ -f "$envfile" ]] || return 0
+        if [[ -z "$TOKEN" ]]; then
+            TOKEN=$(sed -n 's/^HOOKLINE_BOT_TOKEN=\(.*\)/\1/p' "$envfile" 2>/dev/null | head -1)
+        fi
+        if [[ -z "$CHAT" ]]; then
+            CHAT=$(sed -n 's/^HOOKLINE_CHAT_ID=\(.*\)/\1/p' "$envfile" 2>/dev/null | head -1)
+        fi
+    }
+
     _extract_from_profile() {
         local profile="$1"
         [[ -f "$profile" ]] || return 0
@@ -224,12 +235,18 @@ if [[ "$UPDATE" == "true" && ( -z "$TOKEN" || -z "$CHAT" ) ]]; then
         fi
     }
 
-    # 1. Shell profiles
+    # 1. Project .env (developer's source of truth)
+    _extract_from_env "$SCRIPT_DIR/.env"
+
+    # 2. Installed .env (written by previous setup)
+    _extract_from_env "$HOOKS_DIR/.env"
+
+    # 3. Shell profiles (legacy)
     _extract_from_profile "$HOME/.zshrc"
     _extract_from_profile "$HOME/.bashrc"
     _extract_from_profile "$HOME/.bash_profile"
 
-    # 2. Installed launchd plist
+    # 4. Installed launchd plist
     _PLIST="$HOME/Library/LaunchAgents/com.claude.hookline-serve.plist"
     if [[ -f "$_PLIST" ]]; then
         if [[ -z "$TOKEN" ]]; then
@@ -240,7 +257,7 @@ if [[ "$UPDATE" == "true" && ( -z "$TOKEN" || -z "$CHAT" ) ]]; then
         fi
     fi
 
-    # 3. Current environment
+    # 5. Current environment
     if [[ -z "$TOKEN" ]]; then TOKEN="${TELEGRAM_BOT_TOKEN:-}"; fi
     if [[ -z "$CHAT" ]]; then CHAT="${TELEGRAM_CHAT_ID:-}"; fi
 
