@@ -1,3 +1,7 @@
+[![hookline](assets/banner.png)](github.com/Mathews-Tom/hookline)
+
+---
+
 # hookline
 
 **Claude Code ↔ Telegram relay — notifications, bidirectional messaging, persistent memory, and proactive features.**
