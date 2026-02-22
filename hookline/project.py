@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from notify.config import PROJECT_CONFIG_PATH
+from hookline.config import PROJECT_CONFIG_PATH
 
 _project_config: dict | None = None
 

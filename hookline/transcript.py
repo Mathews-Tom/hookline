@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from notify._log import log
+from hookline._log import log
 
 # Cache transcript summaries by (path, mtime)
 _transcript_cache: dict[str, tuple[float, dict[str, Any]]] = {}

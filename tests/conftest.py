@@ -1,4 +1,4 @@
-"""Shared fixtures for claude-notify tests."""
+"""Shared fixtures for hookline tests."""
 from __future__ import annotations
 
 import importlib
@@ -13,22 +13,22 @@ import pytest
 
 @pytest.fixture()
 def _add_project_root(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Add the project root to sys.path so we can import notify."""
+    """Add the project root to sys.path so we can import hookline."""
     root = str(Path(__file__).resolve().parent.parent)
     if root not in sys.path:
         monkeypatch.syspath_prepend(root)
 
 
 @pytest.fixture()
-def notify(_add_project_root: None, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Any:  # noqa: ARG001
-    """Import notify package with sandboxed state directory and no real Telegram calls."""
-    import notify as _notify
+def hookline(_add_project_root: None, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Any:  # noqa: ARG001
+    """Import hookline package with sandboxed state directory and no real Telegram calls."""
+    import hookline as _hookline
 
-    # __init__.py re-exports shadow submodule names (e.g., notify.serve = function).
+    # __init__.py re-exports shadow submodule names (e.g., hookline.serve = function).
     # Use sys.modules to get the actual module objects.
     def _submod(name: str) -> ModuleType:
-        importlib.import_module(f"notify.{name}")
-        return sys.modules[f"notify.{name}"]
+        importlib.import_module(f"hookline.{name}")
+        return sys.modules[f"hookline.{name}"]
 
     _config = _submod("config")
     _state = _submod("state")
@@ -40,7 +40,7 @@ def notify(_add_project_root: None, monkeypatch: pytest.MonkeyPatch, tmp_path: P
     _serve = _submod("serve")
     _debounce = _submod("debounce")
 
-    state_dir = tmp_path / "notify-state"
+    state_dir = tmp_path / "hookline-state"
     state_dir.mkdir()
     pid_file = state_dir / "serve.pid"
 
@@ -69,20 +69,20 @@ def notify(_add_project_root: None, monkeypatch: pytest.MonkeyPatch, tmp_path: P
                 monkeypatch.setattr(mod, attr, value)
 
     # Clear caches
-    monkeypatch.setattr(_config, "_notify_config", None)
+    monkeypatch.setattr(_config, "_hookline_config", None)
     monkeypatch.setattr(_project, "_project_config", None)
     monkeypatch.setattr(_transcript, "_transcript_cache", {})
 
     # Patch the re-exports on the package itself for direct access
     for attr, value in patches.items():
-        if hasattr(_notify, attr):
-            monkeypatch.setattr(_notify, attr, value)
+        if hasattr(_hookline, attr):
+            monkeypatch.setattr(_hookline, attr, value)
 
-    return _notify
+    return _hookline
 
 
 @pytest.fixture()
-def mock_telegram(notify: Any, monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, dict[str, Any]]]:
+def mock_telegram(hookline: Any, monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, dict[str, Any]]]:
     """Replace _telegram_api with a call recorder."""
     calls: list[tuple[str, dict[str, Any]]] = []
 
@@ -97,9 +97,9 @@ def mock_telegram(notify: Any, monkeypatch: pytest.MonkeyPatch) -> list[tuple[st
         return {"ok": True, "result": {}}
 
     # Patch in the actual submodule where it's called
-    _telegram = sys.modules["notify.telegram"]
-    _approval = sys.modules["notify.approval"]
-    _replies = sys.modules["notify.replies"]
+    _telegram = sys.modules["hookline.telegram"]
+    _approval = sys.modules["hookline.approval"]
+    _replies = sys.modules["hookline.replies"]
     monkeypatch.setattr(_telegram, "_telegram_api", fake_api)
     if hasattr(_approval, "_telegram_api"):
         monkeypatch.setattr(_approval, "_telegram_api", fake_api)
@@ -110,9 +110,9 @@ def mock_telegram(notify: Any, monkeypatch: pytest.MonkeyPatch) -> list[tuple[st
 
 
 @pytest.fixture()
-def enable_notifications(notify: Any, tmp_path: Path) -> Path:  # noqa: ARG001
+def enable_notifications(hookline: Any, tmp_path: Path) -> Path:  # noqa: ARG001
     """Create a sentinel file to enable notifications."""
-    sentinel = tmp_path / "notify-enabled"
+    sentinel = tmp_path / "hookline-enabled"
     sentinel.write_text(datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
     return sentinel
 

@@ -1,13 +1,13 @@
-"""CLI dispatch for python3 -m notify."""
+"""CLI dispatch for python3 -m hookline."""
 from __future__ import annotations
 
 import json
 import sys
 
-from notify import __version__
-from notify._log import log
-from notify.approval import _handle_pre_tool_use, _send_threaded
-from notify.config import (
+from hookline import __version__
+from hookline._log import log
+from hookline.approval import _handle_pre_tool_use, _send_threaded
+from hookline.config import (
     DEBOUNCE_EVENTS,
     DRY_RUN,
     FULL_FORMAT_EVENTS,
@@ -15,14 +15,14 @@ from notify.config import (
     STATE_DIR,
     SUPPRESS,
 )
-from notify.buttons import _clear_last_button_msg
-from notify.debounce import _debounce_accumulate, _debounce_flush, _debounce_should_flush
-from notify.formatting import format_compact, format_full
-from notify.session import _extract_project, _is_enabled, _session_age_seconds
-from notify.state import _clear_state, _is_serve_running
-from notify.tasks import _clear_tasks
-from notify.telegram import _telegram_api, send_message
-from notify.threads import _clear_thread
+from hookline.buttons import _clear_last_button_msg
+from hookline.debounce import _debounce_accumulate, _debounce_flush, _debounce_should_flush
+from hookline.formatting import format_compact, format_full
+from hookline.session import _extract_project, _is_enabled, _session_age_seconds
+from hookline.state import _clear_state, _is_serve_running
+from hookline.tasks import _clear_tasks
+from hookline.telegram import _telegram_api, send_message
+from hookline.threads import _clear_thread
 
 
 def main() -> None:
@@ -91,7 +91,7 @@ def main() -> None:
 
 def health_check() -> None:
     """Run self-diagnostics and print results."""
-    from notify.config import BOT_TOKEN, CHAT_ID
+    from hookline.config import BOT_TOKEN, CHAT_ID
 
     checks: list[tuple[str, bool, str]] = []
 
@@ -147,7 +147,7 @@ def health_check() -> None:
     daemon_running = _is_serve_running()
     daemon_info = ""
     if daemon_running:
-        from notify.config import SERVE_PID_FILE
+        from hookline.config import SERVE_PID_FILE
         try:
             pid = SERVE_PID_FILE.read_text().strip()
             daemon_info = f"PID {pid}"
@@ -155,7 +155,7 @@ def health_check() -> None:
             daemon_info = "running"
     checks.append(("Serve daemon", daemon_running, daemon_info if daemon_running else "not running"))
 
-    print(f"claude-notify v{__version__} health check")
+    print(f"hookline v{__version__} health check")
     print("=" * 45)
     all_ok = True
     for name, ok, detail in checks:
@@ -170,12 +170,5 @@ def health_check() -> None:
 
 
 if __name__ == "__main__":
-    if "--version" in sys.argv:
-        print(f"claude-notify {__version__}")
-    elif "--health" in sys.argv:
-        health_check()
-    elif "--serve" in sys.argv:
-        from notify.serve import serve
-        serve()
-    else:
-        main()
+    from hookline.cli import cli_main
+    cli_main()

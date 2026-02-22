@@ -7,10 +7,10 @@ import urllib.request
 import uuid
 from typing import Any
 
-from notify._log import log
-from notify.buttons import _build_buttons, _clear_last_button_msg, _get_last_button_msg, _set_last_button_msg
-from notify.config import BOT_TOKEN, CHAT_ID, DRY_RUN, SHOW_BUTTONS
-from notify.formatting import _strip_html
+from hookline._log import log
+from hookline.buttons import _build_buttons, _clear_last_button_msg, _get_last_button_msg, _set_last_button_msg
+from hookline.config import BOT_TOKEN, CHAT_ID, DRY_RUN, SHOW_BUTTONS
+from hookline.formatting import _strip_html
 
 
 def _telegram_api(method: str, payload: dict, timeout: int = 10) -> dict | None:

@@ -4,9 +4,9 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from notify.config import STATE_DIR
-from notify.session import _session_key
-from notify.state import _clear_state, _read_state, _write_state
+from hookline.config import STATE_DIR
+from hookline.session import _session_key
+from hookline.state import _clear_state, _read_state, _write_state
 
 
 def _get_thread_id(project: str) -> int | None:

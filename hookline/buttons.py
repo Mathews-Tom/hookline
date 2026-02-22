@@ -1,8 +1,8 @@
 """Inline button building and last-button state tracking."""
 from __future__ import annotations
 
-from notify.session import _session_key
-from notify.state import _clear_state, _read_state, _write_state
+from hookline.session import _session_key
+from hookline.state import _clear_state, _read_state, _write_state
 
 
 def _get_last_button_msg(project: str) -> int | None:

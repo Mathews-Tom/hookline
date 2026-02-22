@@ -5,14 +5,14 @@ import os
 import sys
 import time
 
-from notify._log import log, setup_serve_logging
-from notify.approval import _handle_approval_callback
-from notify.config import BOT_TOKEN, CHAT_ID, SENTINEL_DIR, STATE_DIR
-from notify.replies import _handle_reply_message
-from notify.state import _clear_state, _write_state
-from notify.tasks import _clear_tasks
-from notify.telegram import _answer_callback, _telegram_api
-from notify.threads import _clear_thread
+from hookline._log import log, setup_serve_logging
+from hookline.approval import _handle_approval_callback
+from hookline.config import BOT_TOKEN, CHAT_ID, SENTINEL_DIR, STATE_DIR
+from hookline.replies import _handle_reply_message
+from hookline.state import _clear_state, _write_state
+from hookline.tasks import _clear_tasks
+from hookline.telegram import _answer_callback, _telegram_api
+from hookline.threads import _clear_thread
 
 SERVE_PID_FILE = STATE_DIR / "serve.pid"
 
@@ -28,9 +28,9 @@ def serve() -> None:
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     SERVE_PID_FILE.write_text(str(os.getpid()))
 
-    print("[notify-serve] Daemon started. Polling for updates...")
-    print("[notify-serve] Handles: button callbacks, reply commands")
-    print("[notify-serve] Press Ctrl+C to stop.\n")
+    print("[hookline-serve] Daemon started. Polling for updates...")
+    print("[hookline-serve] Handles: button callbacks, reply commands")
+    print("[hookline-serve] Press Ctrl+C to stop.\n")
 
     offset = 0
     try:
@@ -60,7 +60,7 @@ def serve() -> None:
                 log(f"Serve error: {e}")
                 time.sleep(5)
     except KeyboardInterrupt:
-        print("\n[notify-serve] Stopped.")
+        print("\n[hookline-serve] Stopped.")
     finally:
         SERVE_PID_FILE.unlink(missing_ok=True)
 
@@ -82,7 +82,7 @@ def _handle_button(callback: dict) -> None:
         until = time.time() + 1800
         _write_state(project, "mute.json", {"until": until})
         _answer_callback(callback_id, f"🔇 {project} muted for 30 minutes")
-        print(f"[notify-serve] {user} muted {project} for 30m")
+        print(f"[hookline-serve] {user} muted {project} for 30m")
 
     elif data.startswith("mute_proj_"):
         project = data[10:]
@@ -90,7 +90,7 @@ def _handle_button(callback: dict) -> None:
         sentinel.unlink(missing_ok=True)
         _clear_state(project, "mute.json")
         _answer_callback(callback_id, f"🔕 {project} notifications disabled")
-        print(f"[notify-serve] {user} disabled {project} notifications")
+        print(f"[hookline-serve] {user} disabled {project} notifications")
 
     elif data.startswith("reset_"):
         project = data[6:]
@@ -98,7 +98,7 @@ def _handle_button(callback: dict) -> None:
         _clear_tasks(project)
         _clear_state(project, "debounce.json")
         _answer_callback(callback_id, f"📌 Thread reset — next message starts fresh")
-        print(f"[notify-serve] {user} reset thread for {project}")
+        print(f"[hookline-serve] {user} reset thread for {project}")
 
     elif data.startswith("approve_") or data.startswith("block_"):
         _handle_approval_callback(callback)
