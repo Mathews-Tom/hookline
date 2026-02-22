@@ -7,6 +7,26 @@ import sys
 from pathlib import Path
 from typing import Any
 
+# ── .env loader (stdlib, no dependencies) ────────────────────────────────────
+
+
+def _load_dotenv() -> None:
+    """Load .env from the package root into os.environ (existing vars take precedence)."""
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    if not env_path.is_file():
+        return
+    for line in env_path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip().strip("\"'")
+        os.environ.setdefault(key, value)
+
+
+_load_dotenv()
+
 # ── Paths ────────────────────────────────────────────────────────────────────
 
 CLAUDE_DIR = Path.home() / ".claude"
