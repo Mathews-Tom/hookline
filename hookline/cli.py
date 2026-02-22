@@ -38,11 +38,11 @@ def _do_on(project: str | None) -> None:
     if resolved == "all":
         path = _sentinel_global()
         path.write_text(ts)
-        print(f"hookline enabled (global) at {ts}")
+        print(f"🔔 hookline ON (global) — {ts}")
     else:
         path = _sentinel_project(resolved)
         path.write_text(ts)
-        print(f"hookline enabled for project '{resolved}' at {ts}")
+        print(f"🔔 hookline ON for '{resolved}' — {ts}")
 
 
 def _do_off(project: str | None) -> None:
@@ -52,16 +52,16 @@ def _do_off(project: str | None) -> None:
         path = _sentinel_global()
         if path.exists():
             path.unlink()
-            print("hookline disabled (global)")
+            print("🔕 hookline OFF (global)")
         else:
-            print("hookline already disabled (global)")
+            print("🔕 hookline already OFF (global)")
     else:
         path = _sentinel_project(resolved)
         if path.exists():
             path.unlink()
-            print(f"hookline disabled for project '{resolved}'")
+            print(f"🔕 hookline OFF for '{resolved}'")
         else:
-            print(f"hookline already disabled for project '{resolved}'")
+            print(f"🔕 hookline already OFF for '{resolved}'")
 
 
 def _do_status() -> None:
@@ -74,30 +74,34 @@ def _do_status() -> None:
 
     any_active = False
 
+    print("📊 hookline status")
+    print("──────────────────────────────────────")
+
     if global_sentinel.exists():
         ts = global_sentinel.read_text().strip()
-        print(f"global:    ON  (since {ts})")
+        print(f"  🔔 global     ON  (since {ts})")
         any_active = True
     else:
-        print("global:    OFF")
+        print("  🔕 global     OFF")
 
     for p in project_sentinels:
         name = p.name.removeprefix("hookline-enabled.")
         ts = p.read_text().strip()
-        print(f"{name:10s} ON  (since {ts})")
+        print(f"  🔔 {name:10s} ON  (since {ts})")
         any_active = True
 
     if not any_active:
-        print("hookline is fully disabled")
+        print("  🔕 all notifications disabled")
 
+    print()
     daemon = _is_serve_running()
-    print(f"daemon:    {'running' if daemon else 'stopped'}")
+    print(f"  {'🟢' if daemon else '🔴'} daemon     {'running' if daemon else 'stopped'}")
 
     from hookline.config import RELAY_ENABLED
     if RELAY_ENABLED:
         from hookline.relay import list_active_sessions
         sessions = list_active_sessions()
-        print(f"relay:     ON ({len(sessions)} active session(s))")
+        print(f"  🟢 relay      ON ({len(sessions)} session(s))")
         for s in sessions:
             status_parts: list[str] = []
             if s.get("paused"):
@@ -106,28 +110,30 @@ def _do_status() -> None:
             if unread:
                 status_parts.append(f"{unread} unread")
             extra = f" ({', '.join(status_parts)})" if status_parts else ""
-            print(f"  {s['project']}{extra}")
+            print(f"    └─ {s['project']}{extra}")
     else:
-        print("relay:     OFF")
+        print("  ⚪ relay      OFF")
 
     from hookline.config import MEMORY_ENABLED
     if MEMORY_ENABLED:
         try:
             from hookline.memory.store import get_store
             get_store()  # Verify store is accessible
-            print("memory:    ON")
+            print("  🟢 memory     ON")
         except Exception:
-            print("memory:    ON (store unavailable)")
+            print("  🟡 memory     ON (store unavailable)")
     else:
-        print("memory:    OFF")
+        print("  ⚪ memory     OFF")
 
     from hookline.config import SCHEDULE_ENABLED
     if SCHEDULE_ENABLED:
         from hookline.scheduler import get_status
         tasks = get_status()
-        print(f"scheduler: ON ({len(tasks)} task(s))")
+        print(f"  🟢 scheduler  ON ({len(tasks)} task(s))")
     else:
-        print("scheduler: OFF")
+        print("  ⚪ scheduler  OFF")
+
+    print("──────────────────────────────────────")
 
 
 def _do_serve() -> None:
@@ -145,7 +151,7 @@ def _do_health() -> None:
 def _do_version() -> None:
     """Print version string."""
     from hookline import __version__
-    print(f"hookline {__version__}")
+    print(f"🎣 hookline {__version__}")
 
 
 def _do_reset(project: str | None) -> None:
@@ -157,7 +163,7 @@ def _do_reset(project: str | None) -> None:
 
     if resolved == "all":
         if not STATE_DIR.exists():
-            print("no state to reset")
+            print("⚪ no state to reset")
             return
         cleared = 0
         for project_dir in STATE_DIR.iterdir():
@@ -167,11 +173,11 @@ def _do_reset(project: str | None) -> None:
             for fname in ("thread.json", "tasks.json", "debounce.json", "mute.json"):
                 _clear_state(proj, fname)
             cleared += 1
-        print(f"reset state for {cleared} project(s)")
+        print(f"🧹 reset state for {cleared} project(s)")
     else:
         for fname in ("thread.json", "tasks.json", "debounce.json", "mute.json"):
             _clear_state(resolved, fname)
-        print(f"reset state for project '{resolved}'")
+        print(f"🧹 reset state for '{resolved}'")
 
 
 def _do_config() -> None:
@@ -196,34 +202,37 @@ def _do_config() -> None:
     chat_display = CHAT_ID if CHAT_ID else "(not set)"
     suppress_display = ", ".join(sorted(SUPPRESS)) if SUPPRESS else "(none)"
 
-    print(f"BOT_TOKEN:         {token_display}")
-    print(f"CHAT_ID:           {chat_display}")
-    print(f"sentinel_dir:      {SENTINEL_DIR}")
-    print(f"state_dir:         {STATE_DIR}")
-    print(f"config_file:       {NOTIFY_CONFIG_PATH}")
-    print(f"serve_pid_file:    {SERVE_PID_FILE}")
-    print(f"min_session_age:   {MIN_SESSION_AGE}s")
-    print(f"debounce_window:   {DEBOUNCE_WINDOW}s")
-    print(f"show_buttons:      {SHOW_BUTTONS}")
-    print(f"suppress:          {suppress_display}")
-    print(f"approval_enabled:  {APPROVAL_ENABLED}")
-    print(f"approval_user:     {approval_display(APPROVAL_USER)}")
-    print(f"approval_timeout:  {APPROVAL_TIMEOUT}s")
+    print("⚙️  hookline config")
+    print("──────────────────────────────────────")
+    print(f"  🔑 bot_token:        {token_display}")
+    print(f"  💬 chat_id:          {chat_display}")
+    print(f"  📁 sentinel_dir:     {SENTINEL_DIR}")
+    print(f"  📁 state_dir:        {STATE_DIR}")
+    print(f"  📄 config_file:      {NOTIFY_CONFIG_PATH}")
+    print(f"  📄 serve_pid_file:   {SERVE_PID_FILE}")
+    print(f"  ⏱️  min_session_age:  {MIN_SESSION_AGE}s")
+    print(f"  ⏱️  debounce_window:  {DEBOUNCE_WINDOW}s")
+    print(f"  🔘 show_buttons:     {SHOW_BUTTONS}")
+    print(f"  🚫 suppress:         {suppress_display}")
+    print(f"  🛡️  approval_enabled: {APPROVAL_ENABLED}")
+    print(f"  👤 approval_user:    {approval_display(APPROVAL_USER)}")
+    print(f"  ⏱️  approval_timeout: {APPROVAL_TIMEOUT}s")
 
     from hookline.config import RELAY_ENABLED, RELAY_MODE
-    print(f"relay_enabled:     {RELAY_ENABLED}")
-    print(f"relay_mode:        {RELAY_MODE}")
+    print(f"  📡 relay_enabled:    {RELAY_ENABLED}")
+    print(f"  📡 relay_mode:       {RELAY_MODE}")
 
     from hookline.config import MEMORY_DB_PATH, MEMORY_ENABLED, MEMORY_MAX_ENTRIES
-    print(f"memory_enabled:    {MEMORY_ENABLED}")
-    print(f"memory_db_path:    {MEMORY_DB_PATH or '(default)'}")
-    print(f"memory_max_entries:{MEMORY_MAX_ENTRIES}")
+    print(f"  🧠 memory_enabled:   {MEMORY_ENABLED}")
+    print(f"  🧠 memory_db_path:   {MEMORY_DB_PATH or '(default)'}")
+    print(f"  🧠 memory_max_entries: {MEMORY_MAX_ENTRIES}")
 
     from hookline.config import BRIEFING_CRON, CHECKIN_INTERVAL, DIGEST_CRON, SCHEDULE_ENABLED
-    print(f"schedule_enabled:  {SCHEDULE_ENABLED}")
-    print(f"briefing_cron:     {BRIEFING_CRON}")
-    print(f"digest_cron:       {DIGEST_CRON}")
-    print(f"checkin_interval:  {CHECKIN_INTERVAL}m")
+    print(f"  📅 schedule_enabled: {SCHEDULE_ENABLED}")
+    print(f"  📅 briefing_cron:    {BRIEFING_CRON}")
+    print(f"  📅 digest_cron:      {DIGEST_CRON}")
+    print(f"  📅 checkin_interval: {CHECKIN_INTERVAL}m")
+    print("──────────────────────────────────────")
 
 
 def approval_display(val: str) -> str:
@@ -238,15 +247,20 @@ def _do_doctor() -> None:
     from hookline.__main__ import health_check
     from hookline.config import NOTIFY_CONFIG_PATH, SENTINEL_DIR, STATE_DIR
 
-    print("=== Extended diagnostics ===")
-    print(f"sentinel_dir exists: {SENTINEL_DIR.exists()} ({SENTINEL_DIR})")
-    print(f"state_dir exists:    {STATE_DIR.exists()} ({STATE_DIR})")
-    print(f"config_file exists:  {NOTIFY_CONFIG_PATH.exists()} ({NOTIFY_CONFIG_PATH})")
+    print("🩺 Extended diagnostics")
+    print("──────────────────────────────────────")
+
+    _ok = "✅"
+    _no = "❌"
+
+    print(f"  {_ok if SENTINEL_DIR.exists() else _no} sentinel_dir: {SENTINEL_DIR}")
+    print(f"  {_ok if STATE_DIR.exists() else _no} state_dir:    {STATE_DIR}")
+    print(f"  {_ok if NOTIFY_CONFIG_PATH.exists() else _no} config_file:  {NOTIFY_CONFIG_PATH}")
 
     sentinels = list(SENTINEL_DIR.glob("hookline-enabled*"))
-    print(f"active sentinels:    {len(sentinels)}")
+    print(f"  📋 active sentinels: {len(sentinels)}")
     for s in sorted(sentinels):
-        print(f"  {s.name}")
+        print(f"     └─ {s.name}")
 
     print()
     health_check()
@@ -259,20 +273,23 @@ def _do_migrate() -> None:
 
 
 def _print_usage() -> None:
+    from hookline import __version__
     print(
+        f"🎣 hookline {__version__}\n"
+        "\n"
         "usage: hookline <command> [args] [--project NAME] [--dry-run]\n"
         "\n"
         "commands:\n"
-        "  on       enable notifications (global or --project scoped)\n"
-        "  off      disable notifications\n"
-        "  status   show enabled state and daemon status\n"
-        "  serve    start Telegram polling daemon\n"
-        "  health   run self-diagnostics\n"
-        "  doctor   extended diagnostics\n"
-        "  reset    clear thread/tasks/debounce state\n"
-        "  config   print effective configuration\n"
-        "  migrate  migrate from notify to hookline\n"
-        "  version  print version\n"
+        "  🔔 on       enable notifications (global or --project scoped)\n"
+        "  🔕 off      disable notifications\n"
+        "  📊 status   show enabled state and daemon status\n"
+        "  🤖 serve    start Telegram polling daemon\n"
+        "  🩺 health   run self-diagnostics\n"
+        "  🩺 doctor   extended diagnostics\n"
+        "  🧹 reset    clear thread/tasks/debounce state\n"
+        "  ⚙️  config   print effective configuration\n"
+        "  🔄 migrate  migrate from notify to hookline\n"
+        "  🏷️  version  print version\n"
         "\n"
         "flags:\n"
         "  --project NAME  scope on/off/reset to a specific project\n"
@@ -369,6 +386,6 @@ def cli_main() -> None:
     elif cmd == "version":
         _do_version()
     else:
-        print(f"hookline: unknown command '{cmd}'", file=sys.stderr)
+        print(f"❌ hookline: unknown command '{cmd}'", file=sys.stderr)
         _print_usage()
         sys.exit(1)

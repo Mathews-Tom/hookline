@@ -35,45 +35,45 @@ while [[ $# -gt 0 ]]; do
         --uninstall) UNINSTALL=true; shift ;;
         --update)    UPDATE=true; shift ;;
         --migrate)   MIGRATE=true; shift ;;
-        *)           echo "Unknown arg: $1"; exit 1 ;;
+        *)           echo "❌ Unknown arg: $1"; exit 1 ;;
     esac
 done
 
 # ── Uninstall mode ──────────────────────────────────────────────────────────
 
 if [[ "$UNINSTALL" == "true" ]]; then
-    echo "──────────────────────────────────────────────"
-    echo "  Uninstalling Claude Code Telegram Hooks"
+    echo ""
+    echo "🗑️  Uninstalling Hookline"
     echo "──────────────────────────────────────────────"
     echo ""
 
     # Remove hook scripts and packages (both hookline and legacy notify)
     if [[ -d "$HOME/.claude/hooks/hookline" ]]; then
         rm -rf "$HOME/.claude/hooks/hookline"
-        echo "  Removed $HOME/.claude/hooks/hookline/"
+        echo "  ✅ Removed ~/.claude/hooks/hookline/"
     fi
     if [[ -d "$HOME/.claude/hooks/notify" ]]; then
         rm -rf "$HOME/.claude/hooks/notify"
-        echo "  Removed $HOME/.claude/hooks/notify/"
+        echo "  ✅ Removed ~/.claude/hooks/notify/"
     fi
     # Legacy monolith cleanup
     if [[ -f "$HOME/.claude/hooks/notify.py" ]]; then
         rm -f "$HOME/.claude/hooks/notify.py"
-        echo "  Removed $HOME/.claude/hooks/notify.py"
+        echo "  ✅ Removed ~/.claude/hooks/notify.py"
     fi
     if [[ -f "$HOME/.claude/hooks/toggle.sh" ]]; then
         rm -f "$HOME/.claude/hooks/toggle.sh"
-        echo "  Removed $HOME/.claude/hooks/toggle.sh"
+        echo "  ✅ Removed ~/.claude/hooks/toggle.sh"
     fi
 
     # Remove slash command (both hookline and legacy notify)
     if [[ -f "$HOME/.claude/commands/hookline.md" ]]; then
         rm -f "$HOME/.claude/commands/hookline.md"
-        echo "  Removed ~/.claude/commands/hookline.md"
+        echo "  ✅ Removed ~/.claude/commands/hookline.md"
     fi
     if [[ -f "$HOME/.claude/commands/notify.md" ]]; then
         rm -f "$HOME/.claude/commands/notify.md"
-        echo "  Removed ~/.claude/commands/notify.md"
+        echo "  ✅ Removed ~/.claude/commands/notify.md"
     fi
 
     # Remove hooks from settings.json
@@ -110,7 +110,7 @@ elif "hooks" in settings:
 
 with open(settings_path, "w") as f:
     json.dump(settings, f, indent=2)
-print("  Cleaned hookline hooks from settings.json")
+print("  ✅ Cleaned hookline hooks from settings.json")
 PYEOF
     fi
 
@@ -127,7 +127,7 @@ PYEOF
     if [[ -n "$PROFILE" ]]; then
         grep -v "TELEGRAM_BOT_TOKEN\|TELEGRAM_CHAT_ID\|# Claude Code Telegram\|alias hookline-on\|alias hookline-off\|alias hookline-status\|alias notify-on\|alias notify-off\|alias notify-status" "$PROFILE" > "$PROFILE.tmp" || true
         mv "$PROFILE.tmp" "$PROFILE"
-        echo "  Cleaned env vars and aliases from $PROFILE"
+        echo "  ✅ Cleaned env vars and aliases from $PROFILE"
     fi
 
     # Remove daemon (OS-specific) — both hookline and legacy notify
@@ -135,13 +135,13 @@ PYEOF
     if [[ -f "$PLIST" ]]; then
         launchctl unload "$PLIST" 2>/dev/null || true
         rm -f "$PLIST"
-        echo "  Removed launchd agent (com.claude.hookline-serve)"
+        echo "  ✅ Removed launchd agent (com.claude.hookline-serve)"
     fi
     PLIST_LEGACY="$HOME/Library/LaunchAgents/com.claude.notify-serve.plist"
     if [[ -f "$PLIST_LEGACY" ]]; then
         launchctl unload "$PLIST_LEGACY" 2>/dev/null || true
         rm -f "$PLIST_LEGACY"
-        echo "  Removed launchd agent (com.claude.notify-serve)"
+        echo "  ✅ Removed launchd agent (com.claude.notify-serve)"
     fi
     SERVICE="$HOME/.config/systemd/user/claude-hookline-serve.service"
     if [[ -f "$SERVICE" ]]; then
@@ -149,7 +149,7 @@ PYEOF
         systemctl --user disable claude-hookline-serve.service 2>/dev/null || true
         rm -f "$SERVICE"
         systemctl --user daemon-reload 2>/dev/null || true
-        echo "  Removed systemd service (claude-hookline-serve)"
+        echo "  ✅ Removed systemd service (claude-hookline-serve)"
     fi
     SERVICE_LEGACY="$HOME/.config/systemd/user/claude-notify-serve.service"
     if [[ -f "$SERVICE_LEGACY" ]]; then
@@ -157,27 +157,27 @@ PYEOF
         systemctl --user disable claude-notify-serve.service 2>/dev/null || true
         rm -f "$SERVICE_LEGACY"
         systemctl --user daemon-reload 2>/dev/null || true
-        echo "  Removed systemd service (claude-notify-serve)"
+        echo "  ✅ Removed systemd service (claude-notify-serve)"
     fi
 
     # Remove config file (both hookline and legacy notify)
     if [[ -f "$HOME/.claude/hookline.json" ]]; then
         rm -f "$HOME/.claude/hookline.json"
-        echo "  Removed ~/.claude/hookline.json"
+        echo "  ✅ Removed ~/.claude/hookline.json"
     fi
     if [[ -f "$HOME/.claude/notify-config.json" ]]; then
         rm -f "$HOME/.claude/notify-config.json"
-        echo "  Removed ~/.claude/notify-config.json"
+        echo "  ✅ Removed ~/.claude/notify-config.json"
     fi
 
     # Remove state directories (both hookline and legacy notify)
     if [[ -d "$HOME/.claude/hookline-state" ]]; then
         rm -rf "$HOME/.claude/hookline-state"
-        echo "  Removed ~/.claude/hookline-state/"
+        echo "  ✅ Removed ~/.claude/hookline-state/"
     fi
     if [[ -d "$HOME/.claude/notify-state" ]]; then
         rm -rf "$HOME/.claude/notify-state"
-        echo "  Removed ~/.claude/notify-state/"
+        echo "  ✅ Removed ~/.claude/notify-state/"
     fi
 
     # Remove sentinel files (both hookline and legacy notify)
@@ -185,14 +185,14 @@ PYEOF
     rm -f "$HOME/.claude/hookline-enabled".*
     rm -f "$HOME/.claude/notify-enabled"
     rm -f "$HOME/.claude/notify-enabled".*
-    echo "  Removed sentinel files"
+    echo "  ✅ Removed sentinel files"
 
     echo ""
-    echo "  Note: ~/.claude/hookline.json preserved (user config)"
+    echo "  ℹ️  ~/.claude/hookline.json preserved (user config)"
     echo ""
     echo "──────────────────────────────────────────────"
-    echo "  Uninstall complete."
-    echo "  Restart your shell or run: source $PROFILE"
+    echo "✅ Uninstall complete"
+    echo "   Restart your shell or run: source $PROFILE"
     echo "──────────────────────────────────────────────"
     exit 0
 fi
@@ -200,13 +200,13 @@ fi
 # ── Migrate mode ─────────────────────────────────────────────────────────────
 
 if [[ "$MIGRATE" == "true" ]]; then
-    echo "──────────────────────────────────────────────"
-    echo "  Migrating notify → hookline"
+    echo ""
+    echo "🔄 Migrating notify → hookline"
     echo "──────────────────────────────────────────────"
     echo ""
     PYTHONPATH="$HOOKS_DIR" python3 -m hookline migrate
     echo ""
-    echo "  Migration complete. Re-run setup.sh to finish installation."
+    echo "✅ Migration complete — re-run setup.sh to finish installation"
     exit 0
 fi
 
@@ -249,40 +249,43 @@ if [[ "$UPDATE" == "true" && ( -z "$TOKEN" || -z "$CHAT" ) ]]; then
         _masked_token="${TOKEN%%:*}:${TOKEN#*:}"
         _after_colon="${_masked_token#*:}"
         _masked_token="${_masked_token%%:*}:${_after_colon:0:3}***"
-        echo "→ Reusing existing Telegram credentials"
-        echo "  Token: $_masked_token"
-        echo "  Chat:  $CHAT"
+        echo "🔑 Reusing existing Telegram credentials"
+        echo "   Token: $_masked_token"
+        echo "   Chat:  $CHAT"
     fi
 fi
 
 # ── Interactive prompts if needed ────────────────────────────────────────────
 
 if [[ -z "$TOKEN" ]]; then
-    echo "──────────────────────────────────────────────"
-    echo "  Claude Code → Telegram Notification Setup"
+    echo ""
+    echo "🎣 Hookline — Telegram Notification Setup"
     echo "──────────────────────────────────────────────"
     echo ""
-    echo "You'll need a Telegram bot token and your chat ID."
-    echo "  1. Message @BotFather on Telegram → /newbot → copy the token"
-    echo "  2. Open your new bot and send /start (required before the bot can message you)"
-    echo "  3. Message @userinfobot on Telegram → it replies with your user ID"
+    echo "  Grab a Telegram bot token and your chat ID:"
     echo ""
-    read -rp "Bot token: " TOKEN
+    echo "  1️⃣  Message @BotFather → /newbot → copy the token"
+    echo "  2️⃣  Open your new bot and send /start"
+    echo "     (required before the bot can message you)"
+    echo "  3️⃣  Message @userinfobot → it replies with your user ID"
+    echo ""
+    read -rp "  🔑 Bot token: " TOKEN
 fi
 
 if [[ -z "$CHAT" ]]; then
-    read -rp "Chat ID:   " CHAT
+    read -rp "  💬 Chat ID:   " CHAT
 fi
 
 if [[ -z "$TOKEN" || -z "$CHAT" ]]; then
-    echo "Error: Both token and chat ID are required."
+    echo "  ❌ Both token and chat ID are required"
     exit 1
 fi
 
 # ── Install hookline package ──────────────────────────────────────────────────
 
 echo ""
-echo "→ Installing hookline package to $HOOKS_DIR/"
+echo "📦 Installing hookline package"
+echo "──────────────────────────────────────────────"
 mkdir -p "$HOOKS_DIR"
 # Remove legacy monolith and notify package if present
 rm -f "$HOOKS_DIR/notify.py"
@@ -291,12 +294,12 @@ rm -rf "$HOOKS_DIR/notify"
 rm -rf "$HOOKS_DIR/hookline"
 cp -r "$SCRIPT_DIR/hookline" "$HOOKS_DIR/hookline"
 VERSION=$(PYTHONPATH="$HOOKS_DIR" python3 -m hookline --version 2>/dev/null | head -1 || echo "unknown")
-echo "  Installed $VERSION"
+echo "  ✅ $VERSION → $HOOKS_DIR/"
 
 # ── Install slash command ────────────────────────────────────────────────────
 
 COMMANDS_DIR="$HOME/.claude/commands"
-echo "→ Installing /hookline slash command to $COMMANDS_DIR/"
+echo "  ✅ /hookline slash command → $COMMANDS_DIR/"
 mkdir -p "$COMMANDS_DIR"
 cp "$SCRIPT_DIR/hookline.md" "$COMMANDS_DIR/hookline.md"
 # Remove legacy notify slash command if present
@@ -309,16 +312,14 @@ if [[ ! -f "$PROJECT_CONFIG" ]]; then
     # Migrate from legacy notify-projects.json if it exists
     LEGACY_PROJECT_CONFIG="$HOME/.claude/notify-projects.json"
     if [[ -f "$LEGACY_PROJECT_CONFIG" ]]; then
-        echo "→ Migrating project emoji config from notify-projects.json"
+        echo "  🔄 Migrating project emoji config from notify-projects.json"
         cp "$LEGACY_PROJECT_CONFIG" "$PROJECT_CONFIG"
-        echo "  Migrated to $PROJECT_CONFIG"
     else
-        echo "→ Installing default project emoji config"
+        echo "  ✅ Project emoji config → $PROJECT_CONFIG"
         cp "$SCRIPT_DIR/hookline-projects.json" "$PROJECT_CONFIG"
-        echo "  Edit $PROJECT_CONFIG to customize project emojis"
     fi
 else
-    echo "→ Project config already exists at $PROJECT_CONFIG (skipping)"
+    echo "  ⏭️  Project config exists (skipping)"
 fi
 
 # ── Install notification config (if not already present) ─────────────────────
@@ -328,11 +329,10 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
     # Migrate from legacy notify-config.json if it exists
     LEGACY_CONFIG_FILE="$HOME/.claude/notify-config.json"
     if [[ -f "$LEGACY_CONFIG_FILE" ]]; then
-        echo "→ Migrating notification config from notify-config.json"
+        echo "  🔄 Migrating notification config from notify-config.json"
         cp "$LEGACY_CONFIG_FILE" "$CONFIG_FILE"
-        echo "  Migrated to $CONFIG_FILE"
     else
-        echo "→ Installing default notification config"
+        echo "  ✅ Notification config → $CONFIG_FILE"
         cat > "$CONFIG_FILE" << 'JSONEOF'
 {
   "show_buttons": true,
@@ -344,10 +344,9 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   "approval_timeout": 120
 }
 JSONEOF
-        echo "  Edit $CONFIG_FILE to customize settings"
     fi
 else
-    echo "→ Config already exists at $CONFIG_FILE (skipping)"
+    echo "  ⏭️  Notification config exists (skipping)"
 fi
 
 # ── Create state directory ───────────────────────────────────────────────────
@@ -356,7 +355,9 @@ mkdir -p "$HOME/.claude/hookline-state"
 
 # ── Merge hooks into settings.json ───────────────────────────────────────────
 
-echo "→ Configuring hooks in $SETTINGS_FILE"
+echo ""
+echo "⚙️  Configuring hooks"
+echo "──────────────────────────────────────────────"
 mkdir -p "$(dirname "$SETTINGS_FILE")"
 
 if [[ ! -f "$SETTINGS_FILE" ]]; then
@@ -411,13 +412,13 @@ with open(settings_path, "w") as f:
     json.dump(settings, f, indent=2)
 
 if migrated:
-    print(f"  Migrated {migrated} legacy notify hooks → hookline package")
-print(f"  Updated {len(new_hooks['hooks'])} hook events")
+    print(f"  🔄 Migrated {migrated} legacy notify hook(s)")
+print(f"  ✅ {len(new_hooks['hooks'])} hook events → settings.json")
 PYEOF
 
 # ── Write credentials to .env ────────────────────────────────────────────────
 
-echo "→ Writing credentials to $HOOKS_DIR/.env"
+echo "  ✅ Credentials → $HOOKS_DIR/.env"
 
 cat > "$HOOKS_DIR/.env" << EOF
 # Hookline Telegram credentials (written by setup.sh)
@@ -425,11 +426,11 @@ HOOKLINE_BOT_TOKEN=$TOKEN
 HOOKLINE_CHAT_ID=$CHAT
 EOF
 
-echo "  Saved to $HOOKS_DIR/.env"
-
 # ── Set shell aliases ────────────────────────────────────────────────────────
 
-echo "→ Setting shell aliases"
+echo ""
+echo "🐚 Shell aliases"
+echo "──────────────────────────────────────────────"
 
 # Detect shell profile
 PROFILE=""
@@ -455,9 +456,9 @@ alias hookline-off="python3 -m hookline off"
 alias hookline-status="python3 -m hookline status"
 EOF
 
-    echo "  Added aliases to $PROFILE"
+    echo "  ✅ Added hookline-{on,off,status} to $PROFILE"
 else
-    echo "  Warning: Could not detect shell profile."
+    echo "  ⚠️  Could not detect shell profile"
 fi
 
 # Export for current session (test notification needs these)
@@ -467,7 +468,8 @@ export HOOKLINE_CHAT_ID="$CHAT"
 # ── Test notification ────────────────────────────────────────────────────────
 
 echo ""
-echo "→ Sending test notification..."
+echo "🧪 Test notification"
+echo "──────────────────────────────────────────────"
 
 # Temporarily enable notifications for the test
 SENTINEL="$HOME/.claude/hookline-enabled"
@@ -480,11 +482,15 @@ TEST_RESULT=$(echo '{"hook_event_name": "Stop", "cwd": "/test/claude-telegram-ho
 rm -f "$SENTINEL"
 
 if echo "$TEST_RESULT" | grep -q "Sent"; then
-    echo "  Test notification sent! Check Telegram."
+    echo "  ✅ Test notification sent — check Telegram"
 else
-    echo "  Test failed. Output: $TEST_RESULT"
-    echo "    Verify your bot token and chat ID are correct."
-    echo "    Did you send /start to your bot? Telegram blocks bot messages until you do."
+    echo "  ❌ Test failed"
+    echo "     Output: $TEST_RESULT"
+    echo ""
+    echo "  Troubleshoot:"
+    echo "  • Verify your bot token and chat ID"
+    echo "  • Send /start to your bot first"
+    echo "    (Telegram blocks bot messages until you do)"
     exit 1
 fi
 
@@ -492,12 +498,13 @@ fi
 
 OS="$(uname -s)"
 echo ""
+echo "🔄 Serve daemon"
+echo "──────────────────────────────────────────────"
 
 if [[ "$OS" == "Darwin" ]]; then
     PLIST_SRC="$SCRIPT_DIR/com.claude.hookline-serve.plist"
     PLIST_DST="$HOME/Library/LaunchAgents/com.claude.hookline-serve.plist"
 
-    echo "→ Installing serve daemon (launchd)"
     mkdir -p "$HOME/Library/LaunchAgents"
 
     sed -e "s|__HOOKS_DIR__|$HOOKS_DIR|g" \
@@ -508,18 +515,18 @@ if [[ "$OS" == "Darwin" ]]; then
 
     launchctl unload "$PLIST_DST" 2>/dev/null || true
     if launchctl load "$PLIST_DST" 2>/dev/null; then
-        echo "  Installed and started com.claude.hookline-serve"
+        echo "  ✅ launchd agent started (com.claude.hookline-serve)"
     else
-        echo "  Warning: launchctl load failed — start manually: launchctl load $PLIST_DST"
+        echo "  ⚠️  launchctl load failed"
+        echo "     Start manually: launchctl load $PLIST_DST"
     fi
-    echo "  Logs: ~/.claude/hookline-state/serve.{stdout,stderr}.log"
+    echo "  📋 Logs: ~/.claude/hookline-state/serve.{stdout,stderr}.log"
 
 elif [[ "$OS" == "Linux" ]]; then
     SYSTEMD_DIR="$HOME/.config/systemd/user"
     SERVICE_SRC="$SCRIPT_DIR/claude-hookline-serve.service"
     SERVICE_DST="$SYSTEMD_DIR/claude-hookline-serve.service"
 
-    echo "→ Installing serve daemon (systemd user service)"
     mkdir -p "$SYSTEMD_DIR"
 
     sed -e "s|__HOOKS_DIR__|$HOOKS_DIR|g" \
@@ -530,44 +537,40 @@ elif [[ "$OS" == "Linux" ]]; then
     systemctl --user daemon-reload
     systemctl --user enable claude-hookline-serve.service
     systemctl --user restart claude-hookline-serve.service
-    echo "  Installed and started claude-hookline-serve.service"
-    echo "  Check: systemctl --user status claude-hookline-serve"
-    echo "  Logs:  journalctl --user -u claude-hookline-serve -f"
+    echo "  ✅ systemd service started (claude-hookline-serve)"
+    echo "  📋 journalctl --user -u claude-hookline-serve -f"
 
 else
-    echo "→ Skipping daemon install (unsupported OS: $OS)"
-    echo "  Run manually: PYTHONPATH=~/.claude/hooks python3 -m hookline --serve"
+    echo "  ⏭️  Skipped (unsupported OS: $OS)"
+    echo "     Run manually: PYTHONPATH=~/.claude/hooks python3 -m hookline --serve"
 fi
 
 echo ""
 echo "──────────────────────────────────────────────"
-echo "  Setup complete!"
+echo "🎣 Hookline ready!"
+echo "──────────────────────────────────────────────"
 echo ""
-echo "  Notifications are OFF by default."
-echo "  Toggle them when starting long runs:"
+echo "  🔕 Notifications are OFF by default"
+echo "     Toggle when starting long runs:"
 echo ""
-echo "    Claude Code (CLI / App / CoWork):"
-echo "      /hookline on          Enable for current project"
-echo "      /hookline on all      Enable for all projects"
-echo "      /hookline off         Disable for current project"
-echo "      /hookline off all     Disable all notifications"
-echo "      /hookline status      Show what's enabled"
+echo "  Claude Code (CLI / App / CoWork):"
+echo "    /hookline on          Enable for current project"
+echo "    /hookline on all      Enable for all projects"
+echo "    /hookline off         Disable for current project"
+echo "    /hookline off all     Disable all notifications"
+echo "    /hookline status      Show what's enabled"
 echo ""
-echo "    Terminal (instant, no LLM turn):"
-echo "      hookline-on           Enable for current dir's project"
-echo "      hookline-off          Disable for current dir's project"
-echo "      hookline-status       Show all active sentinels"
+echo "  Terminal (instant, no LLM turn):"
+echo "    hookline-on           Enable for current dir"
+echo "    hookline-off          Disable for current dir"
+echo "    hookline-status       Show all active sentinels"
 echo ""
-echo "  Settings:"
-echo "    Edit ~/.claude/hookline.json"
-echo "    (buttons, debounce, suppress, approval — env vars override)"
+echo "  ⚙️  Settings:  ~/.claude/hookline.json"
+echo "  🎨 Emojis:    ~/.claude/hookline-projects.json"
 echo ""
-echo "  Project emojis:"
-echo "    Edit ~/.claude/hookline-projects.json"
+echo "  🤖 Serve daemon (auto-started):"
+echo "     Handles mute, reply commands, tool approval"
+echo "     Reply to notifications: log, full, errors, tools"
 echo ""
-echo "  Serve daemon (auto-started via launchd):"
-echo "    Handles mute buttons, reply commands, tool approval"
-echo "    Reply to any notification with: log, full, errors, tools"
-echo ""
-echo "  Restart your shell or run: source $PROFILE"
+echo "  ➜ source $PROFILE"
 echo "──────────────────────────────────────────────"

@@ -191,17 +191,19 @@ def health_check() -> None:
     daemon_detail = daemon_info if daemon_running else "not running"
     checks.append(("Serve daemon", daemon_running, daemon_detail))
 
-    print(f"hookline v{__version__} health check")
-    print("=" * 45)
+    print(f"🩺 hookline v{__version__} health check")
+    print("──────────────────────────────────────────────")
     all_ok = True
     for name, ok, detail in checks:
-        status = "OK" if ok else "FAIL"
-        icon = "+" if ok else "-"
-        print(f"  [{icon}] {name:16s} {status:4s}  {detail}")
+        icon = "✅" if ok else "❌"
+        print(f"  {icon} {name:16s} {detail}")
         if not ok:
             all_ok = False
-    print("=" * 45)
-    print("  Status: ALL OK" if all_ok else "  Status: ISSUES DETECTED")
+    print("──────────────────────────────────────────────")
+    if all_ok:
+        print("  ✅ All checks passed")
+    else:
+        print("  ❌ Issues detected")
     sys.exit(0 if all_ok else 1)
 
 
