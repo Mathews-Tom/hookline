@@ -21,6 +21,14 @@ All features beyond core notifications are **off by default** and config-gated. 
 
 ---
 
+## Prerequisites
+
+- **Python 3.10+** (3.12 recommended)
+- **macOS** (launchd) or **Linux** (systemd)
+- **Telegram account** with a bot created via [@BotFather](https://t.me/BotFather)
+
+---
+
 ## Quick Start
 
 ### 1. Create a Telegram Bot
@@ -30,9 +38,60 @@ All features beyond core notifications are **off by default** and config-gated. 
 3. Visit `https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates`
 4. Find `"chat":{"id":NNNNNN}` — that's your **chat ID**
 
-### 2. Set Credentials
+### 2. Install (Automated)
 
-Add to your shell profile (`~/.zshrc` or `~/.bashrc`):
+```bash
+git clone https://github.com/Mathews-Tom/hookline.git
+cd hookline
+./setup.sh
+```
+
+The interactive installer prompts for your bot token and chat ID, then:
+
+1. Copies the hookline package to `~/.claude/hooks/hookline`
+2. Merges hook config into `~/.claude/settings.json`
+3. Installs the `/hookline` slash command to `~/.claude/commands/`
+4. Sets environment variables in your shell profile
+5. Creates default config files (`~/.claude/hookline.json`, `~/.claude/hookline-projects.json`)
+6. Creates the state directory (`~/.claude/hookline-state/`)
+7. Installs and starts the serve daemon (launchd on macOS, systemd on Linux)
+8. Sends a test notification to verify the connection
+
+**Setup flags:**
+
+| Flag | Effect |
+|------|--------|
+| `--token XXX --chat YYY` | Non-interactive mode |
+| `--update` | Re-run setup, reuse existing credentials |
+| `--migrate` | Migrate from legacy `notify` package |
+| `--uninstall` | Remove all installed components |
+
+After setup, restart your shell or run `source ~/.zshrc`.
+
+### 3. Verify
+
+```bash
+hookline health    # Check credentials, daemon, all subsystems
+hookline on        # Enable notifications for current project
+hookline status    # Confirm enabled state
+```
+
+### Manual Installation
+
+If you prefer manual setup over `setup.sh`:
+
+<details>
+<summary>Expand manual steps</summary>
+
+**Install the package:**
+
+```bash
+git clone https://github.com/Mathews-Tom/hookline.git
+cd hookline
+pip install -e .
+```
+
+**Set credentials** in your shell profile (`~/.zshrc` or `~/.bashrc`):
 
 ```bash
 export HOOKLINE_BOT_TOKEN="123456:ABCdefGHIjklMNOpqrSTUvwxYZ"
@@ -41,39 +100,30 @@ export HOOKLINE_CHAT_ID="987654321"
 
 Legacy env vars (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`) are also supported — hookline reads both, with `HOOKLINE_*` taking precedence.
 
-### 3. Install
-
-```bash
-git clone https://github.com/Mathews-Tom/hookline.git
-cd hookline
-pip install -e .
-```
-
-### 4. Configure Claude Code Hooks
-
-Add to `~/.claude/settings.json`:
+**Configure Claude Code hooks** in `~/.claude/settings.json`:
 
 ```json
 {
   "hooks": {
-    "Stop": [{ "type": "command", "command": "python3 -m hookline" }],
-    "Notification": [{ "type": "command", "command": "python3 -m hookline" }],
-    "SubagentStop": [{ "type": "command", "command": "python3 -m hookline" }],
-    "TaskCompleted": [{ "type": "command", "command": "python3 -m hookline" }],
-    "TeammateIdle": [{ "type": "command", "command": "python3 -m hookline" }],
-    "PreToolUse": [{ "type": "command", "command": "python3 -m hookline" }]
+    "Stop": [{"hooks": [{"type": "command", "command": "PYTHONPATH=~/.claude/hooks python3 -m hookline"}]}],
+    "Notification": [{"hooks": [{"type": "command", "command": "PYTHONPATH=~/.claude/hooks python3 -m hookline"}]}],
+    "SubagentStop": [{"hooks": [{"type": "command", "command": "PYTHONPATH=~/.claude/hooks python3 -m hookline"}]}],
+    "TaskCompleted": [{"hooks": [{"type": "command", "command": "PYTHONPATH=~/.claude/hooks python3 -m hookline"}]}],
+    "TeammateIdle": [{"hooks": [{"type": "command", "command": "PYTHONPATH=~/.claude/hooks python3 -m hookline"}]}],
+    "PreToolUse": [{"hooks": [{"type": "command", "command": "PYTHONPATH=~/.claude/hooks python3 -m hookline"}]}]
   }
 }
 ```
 
-### 5. Verify
+**Start the serve daemon:**
 
 ```bash
-hookline health
-hookline on
-echo '{"hook_event_name":"Stop","cwd":"/test/demo"}' | python3 -m hookline --dry-run
-hookline off
+hookline serve
 ```
+
+See [Serve Daemon](#serve-daemon) for persistent service setup.
+
+</details>
 
 ---
 
@@ -88,9 +138,9 @@ commands:
   status   show enabled state, daemon, relay, memory, scheduler status
   serve    start Telegram polling daemon
   health   run self-diagnostics
-  doctor   extended diagnostics
+  doctor   extended diagnostics (health + filesystem + sentinel state)
   reset    clear thread/tasks/debounce state
-  config   print effective configuration
+  config   print effective configuration (all tiers resolved)
   migrate  migrate from notify to hookline
   version  print version
 
@@ -108,6 +158,30 @@ hookline on --project all    # Enable globally
 hookline off                 # Disable
 hookline status              # Show what's enabled
 hookline reset               # Clear thread state between tasks
+```
+
+### Slash Command
+
+The `/hookline` slash command is installed to `~/.claude/commands/` by `setup.sh`. Use it inside any Claude Code session:
+
+```
+/hookline on              # Enable for current project
+/hookline on all          # Enable for all projects
+/hookline off             # Disable for current project
+/hookline off all         # Disable all notifications
+/hookline status          # Show what's enabled
+/hookline reset           # Start a new Telegram thread
+/hookline reset all       # Reset threads for all projects
+```
+
+### Shell Aliases
+
+`setup.sh` also adds aliases to your shell profile for terminal-level control without starting a Claude Code session:
+
+```bash
+hookline-on               # Enable for current directory's project
+hookline-off              # Disable for current directory's project
+hookline-status           # Show all active sentinels
 ```
 
 ---
@@ -144,25 +218,50 @@ All messages in a session are **threaded** under the first notification — keep
 
 ## Serve Daemon
 
-The serve daemon handles button presses, reply commands, relay messaging, and scheduled tasks. Start it:
+The serve daemon handles button presses, reply commands, relay messaging, and scheduled tasks. It is installed and started automatically by `setup.sh`.
+
+### Running as a Service
+
+**macOS (launchd):**
+
+```bash
+# Start
+launchctl load ~/Library/LaunchAgents/com.claude.hookline-serve.plist
+
+# Stop
+launchctl unload ~/Library/LaunchAgents/com.claude.hookline-serve.plist
+
+# Logs
+tail -f ~/.claude/hookline-state/serve.log
+```
+
+**Linux (systemd):**
+
+```bash
+# Start and enable on login
+systemctl --user enable --now claude-hookline-serve
+
+# Stop
+systemctl --user stop claude-hookline-serve
+
+# Status and logs
+systemctl --user status claude-hookline-serve
+journalctl --user -u claude-hookline-serve -f
+```
+
+### Manual Foreground Start
 
 ```bash
 hookline serve
 ```
 
-Or run as a background service:
+Or, if using the `setup.sh`-installed copy:
 
-**macOS (launchd):**
 ```bash
-launchctl load ~/Library/LaunchAgents/com.hookline.serve.plist
+PYTHONPATH=~/.claude/hooks python3 -m hookline serve
 ```
 
-**Linux (systemd):**
-```bash
-systemctl --user start hookline-serve
-```
-
-The daemon uses Telegram long-polling (outbound-only, no open ports).
+The daemon uses Telegram long-polling (outbound-only, no open ports). PID is written to `~/.claude/hookline-state/serve.pid`.
 
 ---
 
@@ -538,18 +637,6 @@ hookline/
 
 ---
 
-## Migration from notify
-
-If upgrading from `claude-notify` (v3.x):
-
-```bash
-hookline migrate
-```
-
-This copies state, config, and sentinels from `notify-*` paths to `hookline-*` paths, and updates `~/.claude/settings.json` hook commands from `python3 -m notify` to `python3 -m hookline`.
-
----
-
 ## Development
 
 ### Test Suite
@@ -588,6 +675,46 @@ Process events without Telegram calls:
 ```bash
 echo '{"hook_event_name":"Stop","cwd":"/test/demo"}' | hookline --dry-run
 ```
+
+---
+
+## Troubleshooting
+
+### Test notification failed
+
+- Verify bot token format: `digits:alphanumeric` (e.g., `123456:ABCdef...`)
+- Verify chat ID is numeric (may be negative for groups)
+- Confirm you sent at least one message to the bot first to create the chat
+- Check credentials in current shell: `echo $HOOKLINE_BOT_TOKEN`
+
+### Daemon not starting
+
+- Check plist (macOS): `cat ~/Library/LaunchAgents/com.claude.hookline-serve.plist`
+- Check service (Linux): `systemctl --user status claude-hookline-serve`
+- Check logs: `tail ~/.claude/hookline-state/serve.log`
+- Verify Python path: the plist/service uses `PYTHONPATH=~/.claude/hooks`
+
+### Hooks not firing
+
+- Verify `~/.claude/settings.json` contains hook entries (run `hookline doctor` to check)
+- Confirm notifications are enabled: `hookline status`
+- Test with dry run: `echo '{"hook_event_name":"Stop","cwd":"/test/demo"}' | python3 -m hookline --dry-run`
+
+### Migration from notify (v3.x)
+
+```bash
+./setup.sh --migrate
+```
+
+Or standalone: `hookline migrate`. Copies state, config, and sentinels from `notify-*` paths to `hookline-*` paths and updates hook commands in `settings.json`.
+
+### Complete removal
+
+```bash
+./setup.sh --uninstall
+```
+
+Removes the package, hooks from `settings.json`, environment variables, daemon service, config files, state directories, and sentinel files. Restart your shell after uninstalling.
 
 ---
 
