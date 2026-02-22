@@ -1,0 +1,17 @@
+[Unit]
+Description=Hookline serve daemon for Claude Code Telegram notifications
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=PYTHONPATH=__HOOKS_DIR__
+Environment=HOOKLINE_BOT_TOKEN=__BOT_TOKEN__
+Environment=HOOKLINE_CHAT_ID=__CHAT_ID__
+ExecStart=/usr/bin/python3 -m hookline --serve
+WorkingDirectory=__HOOKS_DIR__
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target
