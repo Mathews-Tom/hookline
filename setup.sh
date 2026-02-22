@@ -246,9 +246,7 @@ if [[ "$UPDATE" == "true" && ( -z "$TOKEN" || -z "$CHAT" ) ]]; then
 
     # Report what we found
     if [[ -n "$TOKEN" && -n "$CHAT" ]]; then
-        _masked_token="${TOKEN%%:*}:${TOKEN#*:}"
-        _after_colon="${_masked_token#*:}"
-        _masked_token="${_masked_token%%:*}:${_after_colon:0:3}***"
+        _masked_token="${TOKEN%%:*}:***${TOKEN: -4}"
         echo "🔑 Reusing existing Telegram credentials"
         echo "   Token: $_masked_token"
         echo "   Chat:  $CHAT"
