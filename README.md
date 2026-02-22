@@ -34,7 +34,8 @@ All features beyond core notifications are **off by default** and config-gated. 
 ### 1. Create a Telegram Bot
 
 1. Message [@BotFather](https://t.me/BotFather) on Telegram → `/newbot` → copy the **bot token**
-2. Message [@userinfobot](https://t.me/userinfobot) on Telegram → it replies with your **chat ID**
+2. **Open your new bot** and send `/start` — this is required before the bot can message you
+3. Message [@userinfobot](https://t.me/userinfobot) on Telegram → it replies with your **chat ID**
 
 ### 2. Install (Automated)
 
@@ -682,7 +683,7 @@ echo '{"hook_event_name":"Stop","cwd":"/test/demo"}' | hookline --dry-run
 
 - Verify bot token format: `digits:alphanumeric` (e.g., `123456:ABCdef...`)
 - Verify chat ID is numeric (may be negative for groups)
-- Confirm you sent at least one message to the bot first to create the chat
+- Confirm you sent `/start` to your bot — Telegram blocks bot→user messages until the user initiates
 - Check credentials in current shell: `echo $HOOKLINE_BOT_TOKEN`
 
 ### Daemon not starting

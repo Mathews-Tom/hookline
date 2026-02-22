@@ -264,7 +264,8 @@ if [[ -z "$TOKEN" ]]; then
     echo ""
     echo "You'll need a Telegram bot token and your chat ID."
     echo "  1. Message @BotFather on Telegram → /newbot → copy the token"
-    echo "  2. Message @userinfobot on Telegram → it replies with your user ID"
+    echo "  2. Open your new bot and send /start (required before the bot can message you)"
+    echo "  3. Message @userinfobot on Telegram → it replies with your user ID"
     echo ""
     read -rp "Bot token: " TOKEN
 fi
@@ -483,6 +484,7 @@ if echo "$TEST_RESULT" | grep -q "Sent"; then
 else
     echo "  Test failed. Output: $TEST_RESULT"
     echo "    Verify your bot token and chat ID are correct."
+    echo "    Did you send /start to your bot? Telegram blocks bot messages until you do."
     exit 1
 fi
 
