@@ -264,9 +264,7 @@ if [[ -z "$TOKEN" ]]; then
     echo ""
     echo "You'll need a Telegram bot token and your chat ID."
     echo "  1. Message @BotFather on Telegram → /newbot → copy the token"
-    echo "  2. Message your new bot, then visit:"
-    echo "     https://api.telegram.org/bot<TOKEN>/getUpdates"
-    echo "     Look for \"chat\":{\"id\":NNNNNN} — that's your chat ID"
+    echo "  2. Message @userinfobot on Telegram → it replies with your user ID"
     echo ""
     read -rp "Bot token: " TOKEN
 fi

@@ -34,9 +34,7 @@ All features beyond core notifications are **off by default** and config-gated. 
 ### 1. Create a Telegram Bot
 
 1. Message [@BotFather](https://t.me/BotFather) on Telegram → `/newbot` → copy the **bot token**
-2. Send any message to your new bot to create the chat
-3. Visit `https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates`
-4. Find `"chat":{"id":NNNNNN}` — that's your **chat ID**
+2. Message [@userinfobot](https://t.me/userinfobot) on Telegram → it replies with your **chat ID**
 
 ### 2. Install (Automated)
 
