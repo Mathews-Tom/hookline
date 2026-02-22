@@ -85,3 +85,10 @@ class KnowledgeEntry(TypedDict, total=False):
     source_id: int | None
     ts: str
     active: bool
+
+
+class ScheduleStatus(TypedDict, total=False):
+    name: str
+    task_type: str
+    last_run: float | None
+    enabled: bool
