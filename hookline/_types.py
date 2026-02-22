@@ -65,3 +65,23 @@ class RelayState(TypedDict, total=False):
     paused: bool
     paused_at: str
     paused_by: str
+
+
+class MemoryEntry(TypedDict, total=False):
+    id: int
+    project: str
+    sender: str
+    text: str
+    ts: str
+    intent: str
+    tags: list[str]
+
+
+class KnowledgeEntry(TypedDict, total=False):
+    id: int
+    project: str
+    category: str
+    text: str
+    source_id: int | None
+    ts: str
+    active: bool
