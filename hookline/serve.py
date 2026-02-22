@@ -1,4 +1,4 @@
-"""Serve daemon: long-poll loop for buttons, replies, approvals."""
+"""Serve daemon: long-poll loop for buttons, replies, approvals, relay."""
 from __future__ import annotations
 
 import os
@@ -7,8 +7,7 @@ import time
 
 from hookline._log import log, setup_serve_logging
 from hookline.approval import _handle_approval_callback
-from hookline.config import BOT_TOKEN, CHAT_ID, SENTINEL_DIR, STATE_DIR
-from hookline.replies import _handle_reply_message
+from hookline.config import BOT_TOKEN, CHAT_ID, RELAY_ENABLED, SENTINEL_DIR, STATE_DIR
 from hookline.state import _clear_state, _write_state
 from hookline.tasks import _clear_tasks
 from hookline.telegram import _answer_callback, _telegram_api
@@ -29,7 +28,7 @@ def serve() -> None:
     SERVE_PID_FILE.write_text(str(os.getpid()))
 
     print("[hookline-serve] Daemon started. Polling for updates...")
-    print("[hookline-serve] Handles: button callbacks, reply commands")
+    print("[hookline-serve] Handles: button callbacks, reply commands, relay")
     print("[hookline-serve] Press Ctrl+C to stop.\n")
 
     offset = 0
@@ -52,7 +51,7 @@ def serve() -> None:
                     if "callback_query" in update:
                         _handle_button(update["callback_query"])
                     elif "message" in update:
-                        _handle_reply_message(update["message"])
+                        _handle_message(update["message"])
 
             except KeyboardInterrupt:
                 raise
@@ -63,6 +62,100 @@ def serve() -> None:
         print("\n[hookline-serve] Stopped.")
     finally:
         SERVE_PID_FILE.unlink(missing_ok=True)
+
+
+def _handle_message(message: dict) -> None:
+    """Route an incoming Telegram message to replies, commands, or relay."""
+    sender_id = str(message.get("from", {}).get("id", ""))
+    if sender_id != CHAT_ID:
+        return
+
+    text = message.get("text", "").strip()
+    if not text:
+        return
+
+    reply_to = message.get("reply_to_message", {})
+    reply_msg_id = reply_to.get("message_id")
+
+    if reply_msg_id:
+        # Thread-scoped message: try reply commands first, then relay commands
+        _handle_threaded_message(message, text, reply_msg_id)
+    elif RELAY_ENABLED:
+        # Free-standing message (not a reply): route through relay commands
+        _handle_freestanding_message(message, text)
+
+
+def _handle_threaded_message(message: dict, text: str, reply_msg_id: int) -> None:
+    """Handle a message that is a reply to a notification thread."""
+    from hookline.commands import dispatch
+    from hookline.replies import _handle_reply_message
+    from hookline.threads import _find_thread_by_message_id
+
+    thread = _find_thread_by_message_id(reply_msg_id)
+    project = thread.get("project", "") if thread else ""
+    chat_msg_id: int = message.get("message_id", 0)
+    if not chat_msg_id:
+        return
+
+    # Parse command and args
+    parts = text.split(maxsplit=1)
+    cmd = parts[0].lower()
+    args = parts[1] if len(parts) > 1 else ""
+
+    # Try new command registry first (relay commands: send, pause, resume, etc.)
+    if dispatch(cmd, project, args, chat_msg_id):
+        return
+
+    # Fall back to legacy reply handlers (log, full, errors, tools, help)
+    _handle_reply_message(message)
+
+
+def _handle_freestanding_message(message: dict, text: str) -> None:
+    """Handle a free-standing message (not a reply) through relay commands."""
+    from hookline.commands import dispatch
+
+    chat_msg_id: int = message.get("message_id", 0)
+    if not chat_msg_id:
+        return
+
+    parts = text.split(maxsplit=1)
+    cmd = parts[0].lower()
+    args = parts[1] if len(parts) > 1 else ""
+
+    # Commands that work without a project context
+    if cmd in ("sessions", "help"):
+        dispatch(cmd, "", args, chat_msg_id)
+        return
+
+    # For project-scoped commands, try to infer project from recent sessions
+    if dispatch(cmd, "", args, chat_msg_id):
+        return
+
+    # Unrecognised free-standing text: queue to relay if exactly one active session
+    if RELAY_ENABLED:
+        from hookline.relay import list_active_sessions, write_inbox
+        sessions = list_active_sessions()
+        if len(sessions) == 1:
+            project = sessions[0]["project"]
+            write_inbox(project, "telegram", text)
+            _telegram_api("sendMessage", {
+                "chat_id": CHAT_ID,
+                "text": f"Queued to <b>{project}</b>",
+                "parse_mode": "HTML",
+                "reply_to_message_id": chat_msg_id,
+            })
+        elif len(sessions) > 1:
+            from hookline.formatting import _esc
+            names = ", ".join(_esc(s["project"]) for s in sessions)
+            _telegram_api("sendMessage", {
+                "chat_id": CHAT_ID,
+                "text": (
+                    f"Multiple sessions active: {names}\n"
+                    "Reply to a thread or use <code>send &lt;msg&gt;</code>"
+                ),
+                "parse_mode": "HTML",
+                "reply_to_message_id": chat_msg_id,
+            })
 
 
 def _handle_button(callback: dict) -> None:
@@ -97,7 +190,7 @@ def _handle_button(callback: dict) -> None:
         _clear_thread(project)
         _clear_tasks(project)
         _clear_state(project, "debounce.json")
-        _answer_callback(callback_id, f"📌 Thread reset — next message starts fresh")
+        _answer_callback(callback_id, "📌 Thread reset — next message starts fresh")
         print(f"[hookline-serve] {user} reset thread for {project}")
 
     elif data.startswith("approve_") or data.startswith("block_"):
