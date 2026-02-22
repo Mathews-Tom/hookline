@@ -4,7 +4,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from hookline._log import log
-from hookline.config import CHAT_ID, RELAY_ENABLED
+from hookline.config import CHAT_ID, MEMORY_ENABLED, RELAY_ENABLED
 from hookline.formatting import _esc, _truncate
 from hookline.project import _project_label
 from hookline.relay import (
@@ -159,3 +159,144 @@ def _cmd_clear(project: str, args: str, reply_to: int) -> None:
         return
     clear_inbox(project)
     _reply(f"Cleared inbox for <b>{_esc(project)}</b>.", reply_to)
+
+
+# ── Memory Commands ──────────────────────────────────────────────────────────
+
+
+def _memory_disabled_reply(reply_to: int) -> None:
+    _reply(
+        "Memory is disabled. Set <code>memory_enabled: true</code> in hookline.json",
+        reply_to,
+    )
+
+
+@register("remember")
+def _cmd_remember(project: str, args: str, reply_to: int) -> None:
+    """Store a fact or note in project memory."""
+    if not MEMORY_ENABLED:
+        _memory_disabled_reply(reply_to)
+        return
+    if not project:
+        _reply("No active session found for this thread.", reply_to)
+        return
+    if not args.strip():
+        _reply("Usage: <code>remember &lt;text&gt;</code>", reply_to)
+        return
+    from hookline.memory.knowledge import KnowledgeManager
+    from hookline.memory.store import get_store
+    km = KnowledgeManager(get_store())
+    kid = km.remember(project, args.strip())
+    _reply(f"Stored in <b>{_esc(project)}</b> memory (id: <code>{kid}</code>)", reply_to)
+
+
+@register("recall")
+def _cmd_recall(project: str, args: str, reply_to: int) -> None:
+    """Search project memory by query."""
+    if not MEMORY_ENABLED:
+        _memory_disabled_reply(reply_to)
+        return
+    if not project:
+        _reply("No active session found for this thread.", reply_to)
+        return
+    if not args.strip():
+        _reply("Usage: <code>recall &lt;query&gt;</code>", reply_to)
+        return
+    from hookline.memory.knowledge import KnowledgeManager
+    from hookline.memory.store import get_store
+    km = KnowledgeManager(get_store())
+    results = km.recall(project, args.strip(), limit=10)
+    if not results:
+        _reply(f"No results for <b>{_esc(args.strip())}</b> in {_esc(project)}.", reply_to)
+        return
+    lines = [f"<b>Recall — {_esc(project)}</b> ({len(results)} result(s))", ""]
+    for msg in results[:10]:
+        sender = msg.get("sender", "?")
+        text = _truncate(msg.get("text", ""), 200)
+        ts = msg.get("ts", "")[:19]
+        lines.append(f"  [{sender}] {_esc(text)}  <i>{ts}</i>")
+    _reply("\n".join(lines), reply_to)
+
+
+@register("goals")
+def _cmd_goals(project: str, args: str, reply_to: int) -> None:
+    """List active goals for a project."""
+    if not MEMORY_ENABLED:
+        _memory_disabled_reply(reply_to)
+        return
+    if not project:
+        _reply("No active session found for this thread.", reply_to)
+        return
+    from hookline.memory.store import get_store
+    store = get_store()
+    goals = store.get_knowledge(project, category="goal", active_only=True)
+    if not goals:
+        _reply(f"No active goals for <b>{_esc(project)}</b>.", reply_to)
+        return
+    lines = [f"<b>Goals — {_esc(project)}</b> ({len(goals)} active)", ""]
+    for i, g in enumerate(goals, 1):
+        lines.append(f"  {i}. {_esc(_truncate(g['text'], 200))}  <i>(id: {g['id']})</i>")
+    _reply("\n".join(lines), reply_to)
+
+
+@register("context")
+def _cmd_context(project: str, args: str, reply_to: int) -> None:
+    """Show memory context snapshot for a project."""
+    if not MEMORY_ENABLED:
+        _memory_disabled_reply(reply_to)
+        return
+    if not project:
+        _reply("No active session found for this thread.", reply_to)
+        return
+    from hookline.memory.knowledge import KnowledgeManager
+    from hookline.memory.store import get_store
+    km = KnowledgeManager(get_store())
+    ctx = km.get_context(project, limit=10)
+    lines = [f"<b>Context — {_esc(project)}</b>", ""]
+
+    goals = ctx.get("active_goals", [])
+    if goals:
+        lines.append(f"<b>Goals</b> ({len(goals)}):")
+        for g in goals[:5]:
+            lines.append(f"  - {_esc(_truncate(g['text'], 150))}")
+
+    facts = ctx.get("facts", [])
+    if facts:
+        lines.append(f"<b>Facts</b> ({len(facts)}):")
+        for f in facts[:5]:
+            lines.append(f"  - {_esc(_truncate(f['text'], 150))}")
+
+    msgs = ctx.get("recent_messages", [])
+    if msgs:
+        lines.append(f"<b>Recent</b> ({len(msgs)} messages)")
+
+    if len(lines) <= 2:
+        _reply(f"No memory data for <b>{_esc(project)}</b>.", reply_to)
+        return
+    _reply("\n".join(lines), reply_to)
+
+
+@register("forget")
+def _cmd_forget(project: str, args: str, reply_to: int) -> None:
+    """Deactivate a memory entry by ID."""
+    if not MEMORY_ENABLED:
+        _memory_disabled_reply(reply_to)
+        return
+    if not project:
+        _reply("No active session found for this thread.", reply_to)
+        return
+    if not args.strip():
+        _reply("Usage: <code>forget &lt;id&gt;</code>", reply_to)
+        return
+    try:
+        kid = int(args.strip())
+    except ValueError:
+        _reply("ID must be a number.", reply_to)
+        return
+    from hookline.memory.knowledge import KnowledgeManager
+    from hookline.memory.store import get_store
+    km = KnowledgeManager(get_store())
+    if km.forget(project, kid):
+        _reply(f"Deactivated memory entry <code>{kid}</code>.", reply_to)
+    else:
+        _reply(f"Entry <code>{kid}</code> not found or already inactive.", reply_to)
