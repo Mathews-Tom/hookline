@@ -1,7 +1,7 @@
 """hookline — Claude Code ↔ Telegram relay."""
 from __future__ import annotations
 
-__version__ = "4.2.0"
+__version__ = "4.3.0"
 
 # Re-export the primary entry points
 from hookline._log import log as _log  # noqa: F401

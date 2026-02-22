@@ -113,6 +113,12 @@ MEMORY_ENABLED = _cfg_bool("HOOKLINE_MEMORY", "memory_enabled", False)
 MEMORY_DB_PATH = _cfg_str("HOOKLINE_MEMORY_DB", "memory_db_path", "")
 MEMORY_MAX_ENTRIES = _cfg_int("HOOKLINE_MEMORY_MAX", "memory_max_entries", 10000)
 
+# Schedule/proactive settings
+SCHEDULE_ENABLED = _cfg_bool("HOOKLINE_SCHEDULE", "schedule_enabled", False)
+BRIEFING_CRON = _cfg_str("HOOKLINE_BRIEFING_CRON", "briefing_cron", "0 9 * * 1-5")
+DIGEST_CRON = _cfg_str("HOOKLINE_DIGEST_CRON", "digest_cron", "0 18 * * *")
+CHECKIN_INTERVAL = _cfg_int("HOOKLINE_CHECKIN_INTERVAL", "checkin_interval", 0)
+
 # ── CLI Mode ─────────────────────────────────────────────────────────────────
 
 DRY_RUN = "--dry-run" in sys.argv
@@ -148,4 +154,7 @@ REPLY_COMMANDS: dict[str, str] = {
     "context": "Show memory context snapshot for a project",
     "forget": "Deactivate a memory entry by ID",
     "help": "Show available commands",
+    "schedule": "Show scheduled task status",
+    "digest": "Trigger a manual daily digest",
+    "briefing": "Trigger a manual morning briefing",
 }

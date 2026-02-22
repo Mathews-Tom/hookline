@@ -5,8 +5,8 @@ import importlib
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 from types import ModuleType
+from typing import Any
 
 import pytest
 
@@ -41,6 +41,7 @@ def hookline(_add_project_root: None, monkeypatch: pytest.MonkeyPatch, tmp_path:
     _debounce = _submod("debounce")
     _relay = _submod("relay")
     _commands = _submod("commands")
+    _proactive = _submod("proactive")
 
     state_dir = tmp_path / "hookline-state"
     state_dir.mkdir()
@@ -54,7 +55,7 @@ def hookline(_add_project_root: None, monkeypatch: pytest.MonkeyPatch, tmp_path:
     all_mods = [
         _config, _state, _session, _project, _transcript, _telegram,
         _approval, _serve, _debounce, _main, _threads, _replies,
-        _relay, _commands,
+        _relay, _commands, _proactive,
     ]
 
     # Patch each attribute only in modules that actually have it
@@ -69,6 +70,7 @@ def hookline(_add_project_root: None, monkeypatch: pytest.MonkeyPatch, tmp_path:
         "MEMORY_ENABLED": False,
         "MEMORY_DB_PATH": memory_db,
         "MEMORY_MAX_ENTRIES": 1000,
+        "SCHEDULE_ENABLED": False,
     }
     for attr, value in patches.items():
         for mod in all_mods:
@@ -84,6 +86,11 @@ def hookline(_add_project_root: None, monkeypatch: pytest.MonkeyPatch, tmp_path:
     _memory_store = _submod("memory.store")
     monkeypatch.setattr(_memory_store, "_store_instance", None)
 
+    # Reset scheduler registry
+    _scheduler = _submod("scheduler")
+    monkeypatch.setattr(_scheduler, "_tasks", {})
+    monkeypatch.setattr(_scheduler, "_SCHEDULE_STATE_FILE", state_dir / "scheduler.json")
+
     # Patch the re-exports on the package itself for direct access
     for attr, value in patches.items():
         if hasattr(_hookline, attr):
@@ -93,7 +100,9 @@ def hookline(_add_project_root: None, monkeypatch: pytest.MonkeyPatch, tmp_path:
 
 
 @pytest.fixture()
-def mock_telegram(hookline: Any, monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, dict[str, Any]]]:
+def mock_telegram(
+    hookline: Any, monkeypatch: pytest.MonkeyPatch,
+) -> list[tuple[str, dict[str, Any]]]:
     """Replace _telegram_api with a call recorder."""
     calls: list[tuple[str, dict[str, Any]]] = []
 
@@ -110,7 +119,7 @@ def mock_telegram(hookline: Any, monkeypatch: pytest.MonkeyPatch) -> list[tuple[
     # Patch in every submodule that imports _telegram_api
     api_modules = [
         "hookline.telegram", "hookline.approval", "hookline.replies",
-        "hookline.commands", "hookline.serve",
+        "hookline.commands", "hookline.serve", "hookline.proactive",
     ]
     for mod_name in api_modules:
         mod = sys.modules.get(mod_name)
